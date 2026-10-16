@@ -9,6 +9,9 @@ You do **not** need a credit card. Stay on the **Spark** plan.
 ## Step 1: Create the project
 
 1. Open <https://console.firebase.google.com> and click **Create a project**.
+   (A Google account that never used Firebase must first accept the Firebase
+   Terms of Service there. Until then, tools such as the Firebase CLI get
+   "403 The caller does not have permission" when they add Firebase.)
 2. Name: `snu-caddy` (Firebase may add a suffix, for example `snu-caddy-1a2b3`).
    This is your **project ID**.
 3. Google Analytics: **turn it off** (not needed, and better for privacy).
@@ -39,8 +42,10 @@ You do **not** need a credit card. Stay on the **Spark** plan.
 ## Step 4: Create the Realtime Database
 
 1. **Build → Realtime Database → Create Database**.
-2. Location: **Singapore (asia-southeast1)**. It is the closest region to
-   Greater Noida, so updates arrive faster.
+2. Location: **Singapore (asia-southeast1)**. Realtime Database has only
+   three regions (us-central1, europe-west1, asia-southeast1) and none in
+   India; Singapore is the closest to Greater Noida, so updates arrive faster.
+   The region cannot be changed later.
 3. Security rules: **Start in locked mode**. (Step 6 uploads our real rules.)
 4. Copy the database URL at the top of the **Data** tab, for example
    `https://snu-caddy-default-rtdb.asia-southeast1.firebasedatabase.app`.
@@ -63,6 +68,10 @@ export const FIREBASE_CONFIG = {
   it, paste the URL from step 4.
 - These values are **not secret**. Every Firebase web app sends them to the
   browser. The security is in `database.rules.json`.
+- With a project ID other than `snu-caddy-45q9r`, also change the
+  `frame-src https://<project-id>.firebaseapp.com` entry of the
+  Content-Security-Policy in `firebase.json` (Google sign-in uses that frame).
+  `npm test` checks it.
 
 ## Step 6: Upload the rules and publish the app
 

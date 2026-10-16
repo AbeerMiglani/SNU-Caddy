@@ -1,10 +1,12 @@
 // Demo / pitch mode: virtual caddies drive real SNU roads with no backend.
 //
-// Each virtual caddy acts like a driver phone (Phase 3):
+// Each virtual caddy acts like a driver phone:
 //   1. It makes a GPS fix every second (true position + small noise).
 //   2. Now and then the fix is blurry (> 20 m) and the accuracy filter drops it.
 //   3. The ping gate sends the fix only if it moved 5 m, or 30 s passed.
-// So the student map gets the same kind of data it will get from Firebase.
+// So the student map gets the same kind of data it gets from Firebase.
+// One caddy takes a long break at one stop, so the pitch shows "Moving",
+// "Parked" and (Caddy 04) "Offline".
 
 import { DEMO } from './config.js';
 import { DEMO_PARKED, DEMO_ROUTES } from './data/demo-routes.js';
@@ -78,21 +80,30 @@ function ahead(r, s, target) {
 }
 
 class VirtualCaddy {
-  /** @param {(c: VirtualCaddy) => boolean} canFlip  false if this caddy holds the last open/full state */
-  constructor(route, startFraction, status, rand, canFlip) {
-    this.canFlip = canFlip;
+  constructor(route, startFraction, rand, now) {
     this.id = route.id;
     this.name = route.name;
     this.line = route.line;
     this.route = prepareRoute(route);
-    this.status = status;
     this.rand = rand;
     this.s = this.route.length * startFraction;
     this.v = 0;
     this.dwellLeft = 0;
-    this.nextStop = this.findNextStop();
+    this.movedAt = now;
     this.gate = createPingGate();
     this.lastSent = null;
+    // The long-break caddy starts in its break (parked for a while already).
+    const brk = DEMO.longBreak;
+    const breakStop = this.route.stops.findIndex((st) => st.name === brk.stop);
+    this.breakStop = this.id === brk.caddy ? breakStop : -1;
+    if (this.breakStop >= 0) {
+      this.s = this.route.stops[breakStop].at;
+      this.dwellLeft = brk.ms;
+      this.nextStop = breakStop;
+      this.movedAt = now - 3 * 60_000;
+    } else {
+      this.nextStop = this.findNextStop();
+    }
   }
 
   findNextStop() {
@@ -122,13 +133,12 @@ class VirtualCaddy {
     return limit;
   }
 
-  /** Advance the physics by dt seconds. Returns a status change, if any. */
+  /** Advance the physics by dt seconds. */
   step(dt) {
-    let changed = false;
     if (this.dwellLeft > 0) {
       this.dwellLeft -= dt * 1000;
       if (this.dwellLeft <= 0) this.nextStop = (this.nextStop + 1) % this.route.stops.length;
-      return changed;
+      return;
     }
     const stop = this.route.stops[this.nextStop];
     const dist = ahead(this.route, this.s, stop.at);
@@ -142,16 +152,12 @@ class VirtualCaddy {
       this.s = stop.at;
       this.v = 0;
       const [min, max] = DEMO.dwellMs;
-      this.dwellLeft = min + this.rand() * (max - min);
       // rand() is always called, so the seeded sequence stays the same.
-      if (this.rand() < DEMO.flipChance && this.canFlip(this)) {
-        this.status = this.status === 'open' ? 'full' : 'open';
-        changed = true;
-      }
+      const dwell = min + this.rand() * (max - min);
+      this.dwellLeft = this.nextStop === this.breakStop ? DEMO.longBreak.ms : dwell;
     } else {
       this.s += move;
     }
-    return changed;
   }
 
   /** What the driver phone's GPS would report now. */
@@ -175,7 +181,8 @@ class VirtualCaddy {
       id: this.id,
       name: this.name,
       line: this.line,
-      status: this.status,
+      online: true,
+      movedAt: this.movedAt,
       lat: fix.lat,
       lng: fix.lng,
       heading: fix.heading,
@@ -204,27 +211,17 @@ export class DemoSimulator {
     this.running = true;
     const rand = mulberry32(DEMO.seed);
     const starts = [0.12, 0.55, 0.3];
-    const statuses = ['open', 'full', 'open'];
-    // The pitch must always show both "Seats open" and "Full": a caddy may flip
-    // only if another moving caddy still has its current status.
-    const canFlip = (c) => this.caddies.some((o) => o !== c && o.status === c.status);
+    const now = Date.now();
     this.caddies = DEMO_ROUTES.map(
-      (route, i) =>
-        new VirtualCaddy(
-          route,
-          starts[i % starts.length],
-          statuses[i % statuses.length],
-          rand,
-          canFlip,
-        ),
+      (route, i) => new VirtualCaddy(route, starts[i % starts.length], rand, now),
     );
 
-    const now = Date.now();
     // Caddy 04: parked at Parking 1, off shift for a while.
     this.onUpdate({
       id: DEMO_PARKED.id,
       name: DEMO_PARKED.name,
-      status: 'offline',
+      online: false,
+      movedAt: now - DEMO.parkedMinutesAgo * 60_000,
       lat: DEMO_PARKED.position[0],
       lng: DEMO_PARKED.position[1],
       heading: 90,
@@ -261,12 +258,10 @@ export class DemoSimulator {
     const dt = (DEMO.gpsTickMs / 1000) * this.speed;
     const now = Date.now();
     for (const c of this.caddies) {
-      let statusChanged = false;
       // Keep each physics step at 0.25 s or less, so corners slow down at any speed.
       const steps = Math.ceil(SUBSTEPS * this.speed);
-      for (let i = 0; i < steps; i++) statusChanged = c.step(dt / steps) || statusChanged;
-      // A status tap (Seats open / Full) is sent at once with the last sent position.
-      if (statusChanged && c.lastSent) this.onUpdate(c.record(c.lastSent));
+      for (let i = 0; i < steps; i++) c.step(dt / steps);
+      if (c.v > 0.5) c.movedAt = now; // like the driver phone's movedAt
       this.emitFix(c, now);
     }
   }

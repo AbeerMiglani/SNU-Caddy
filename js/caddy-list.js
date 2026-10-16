@@ -1,14 +1,13 @@
 // The caddy list inside the bottom sheet.
 // Rows are created once per caddy and then only patched, so focus and
 // scroll position survive the frequent updates. Text goes in with
-// textContent only (caddy names will come from the database in Phase 4).
+// textContent only (caddy names come from the database).
 
+import { cartSvg } from './caddy-layer.js';
+import { STATE_ORDER, STATE_TEXT } from './caddy-state.js';
 import { NEAR_LANDMARK_M } from './config.js';
-import { STATUS_TEXT, cartSvg } from './caddy-layer.js';
 import { LANDMARKS } from './data/campus.js';
 import { distanceM } from './lib/geo.js';
-
-const ORDER = { open: 0, full: 1, offline: 2 };
 
 /** "Near Central Library", or a plain fallback when nothing is close. */
 export function placeLabel(p) {
@@ -24,10 +23,11 @@ export function placeLabel(p) {
   return best && bestD <= NEAR_LANDMARK_M ? `Near ${best.name}` : 'On campus road';
 }
 
+/** Seconds in steps of 5 (the list refreshes every 5 s, so the number never looks stuck). */
 export function timeAgo(ts, now) {
   const s = Math.max(0, Math.round((now - ts) / 1000));
-  if (s < 5) return 'now';
-  if (s < 60) return `${s} s ago`;
+  if (s < 5) return 'just now';
+  if (s < 60) return `${Math.floor(s / 5) * 5} s ago`;
   const m = Math.round(s / 60);
   if (m < 60) return `${m} min ago`;
   return `${Math.round(m / 60)} h ago`;
@@ -79,11 +79,12 @@ export function createCaddyList({ list, empty, summary, onSelect }) {
   }
 
   /**
-   * @param {Map<string, any>} caddies  id -> caddy record
+   * @param {Map<string, any>} caddies  id -> caddy record (with its `state`)
    * @param {string|null} selectedId
+   * @param {string|null} [note]  replaces the summary ("Connecting…", "Paused …")
    * @returns {boolean} true when the list switched between empty and not empty
    */
-  function render(caddies, selectedId) {
+  function render(caddies, selectedId, note = null) {
     const now = Date.now();
     const wasEmpty = !empty.hidden;
     // Moving a focused row in the DOM drops focus; put it back afterwards.
@@ -97,7 +98,7 @@ export function createCaddyList({ list, empty, summary, onSelect }) {
     }
 
     const sorted = [...caddies.values()].sort(
-      (a, b) => ORDER[a.status] - ORDER[b.status] || a.name.localeCompare(b.name),
+      (a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.name.localeCompare(b.name),
     );
 
     sorted.forEach((c, i) => {
@@ -109,23 +110,23 @@ export function createCaddyList({ list, empty, summary, onSelect }) {
       setText(row.name, c.name);
       setText(row.line, c.line ?? '');
       const when = timeAgo(c.ts, now);
-      setText(
-        row.meta,
-        `${placeLabel(c)} · ${c.status === 'offline' ? `last seen ${when}` : when}`,
-      );
-      setText(row.pill, STATUS_TEXT[c.status] ?? c.status);
-      row.btn.dataset.status = c.status;
+      const age = { offline: `last seen ${when}`, lost: `last update ${when}` }[c.state];
+      setText(row.meta, `${placeLabel(c)} · ${age ?? `updated ${when}`}`);
+      setText(row.pill, STATE_TEXT[c.state] ?? c.state);
+      row.btn.dataset.state = c.state;
       row.btn.classList.toggle('is-selected', c.id === selectedId);
       row.btn.setAttribute('aria-current', String(c.id === selectedId));
       if (list.children[i] !== row.li) list.insertBefore(row.li, list.children[i] ?? null);
     });
 
-    const onShift = sorted.filter((c) => c.status !== 'offline').length;
-    const withSeats = sorted.filter((c) => c.status === 'open').length;
-    setText(
-      summary,
-      onShift === 0 ? 'No caddies on shift' : `${onShift} on shift · ${withSeats} with open seats`,
-    );
+    // "Online" = a caddy a student can catch now. Signal lost is counted apart.
+    const count = (state) => sorted.filter((c) => c.state === state).length;
+    const moving = count('moving');
+    const online = moving + count('parked');
+    const lost = count('lost');
+    const parts = [online === 0 ? 'No caddies online' : `${online} online · ${moving} moving`];
+    if (lost) parts.push(`${lost} signal lost`);
+    setText(summary, note ?? parts.join(' · '));
 
     empty.hidden = sorted.length > 0;
     list.hidden = sorted.length === 0;

@@ -1,5 +1,5 @@
 /* Driver screen: OLED pitch black. Pure #000 background so OLED pixels stay off;
-   only dim text, thin rings and the active control are lit. No map, no animation. */
+   only dim text, thin rings and one control are lit. No map, no animation. */
 
 @font-face {
   font-family: 'Inter Variable';
@@ -18,8 +18,6 @@
   --line: #262626;
   --go: #06c167;
   --go-bg: rgba(6, 193, 103, 0.13);
-  --full: #ff5a4f;
-  --full-bg: rgba(255, 90, 79, 0.13);
   --warn: #f5b544;
   --danger: #ff5a4f;
   color-scheme: dark;
@@ -66,8 +64,8 @@ button:disabled {
 /* --- Layout ---------------------------------------------------------------- */
 .driver {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
-  grid-template-areas: 'top' 'center' 'seats' 'bottom';
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas: 'top' 'center' 'bottom';
   gap: 20px;
   height: 100%;
   padding: calc(env(safe-area-inset-top, 0px) + 16px) 20px
@@ -212,56 +210,52 @@ button:disabled {
   color: #3a3a3a;
 }
 
-/* --- On shift: seats and Go offline ---------------------------------------- */
+/* --- On shift: the beacon and Go offline ------------------------------------ */
 .driver[data-mode='on'] .driver__name {
-  margin: 4px 0 10px;
+  margin: 4px 0 4px;
   font-size: 34px;
 }
 
-.driver__seats {
-  grid-area: seats;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+/* Thin rings and one dot: few lit pixels. No animation (OLED and battery). */
+.driver__beacon {
+  display: block;
+  width: min(44vw, 168px);
+  height: auto;
+  margin: 18px auto 16px;
+  --beacon: var(--dim);
 }
 
-.seat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  height: clamp(120px, 24vh, 190px);
-  border: 2px solid var(--line);
-  border-radius: 24px;
-  background: var(--black);
-  color: var(--dim);
-  font-size: 24px;
+.driver[data-tone='ok'] .driver__beacon {
+  --beacon: var(--go);
+}
+
+.driver[data-tone='warn'] .driver__beacon {
+  --beacon: var(--warn);
+}
+
+.driver[data-tone='error'] .driver__beacon {
+  --beacon: var(--danger);
+}
+
+.beacon__ring {
+  fill: none;
+  stroke: var(--beacon);
+  stroke-width: 2;
+  opacity: 0.55;
+}
+
+.beacon__ring--outer {
+  opacity: 0.25;
+}
+
+.beacon__dot {
+  fill: var(--beacon);
+}
+
+.driver[data-mode='on'] .driver__status {
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
-}
-
-.seat__dot {
-  width: 16px;
-  height: 16px;
-  border: 2px solid currentColor;
-  border-radius: 50%;
-}
-
-.seat[aria-pressed='true'] .seat__dot {
-  background: currentColor;
-}
-
-.seat--open[aria-pressed='true'] {
-  border-color: var(--go);
-  background: var(--go-bg);
-  color: var(--go);
-}
-
-.seat--full[aria-pressed='true'] {
-  border-color: var(--full);
-  background: var(--full-bg);
-  color: var(--full);
 }
 
 .driver__off {
@@ -281,20 +275,27 @@ button:disabled {
   color: var(--black);
 }
 
+.driver__retry {
+  height: 52px;
+  padding: 0 28px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--black);
+  color: var(--soft);
+  font-size: 17px;
+  font-weight: 700;
+}
+
 /* --- Phone on its side (dashboard mount) ------------------------------------- */
 @media (orientation: landscape) and (max-height: 560px) {
   .driver {
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto 1fr auto;
-    grid-template-areas: 'top top' 'center seats' 'center bottom';
+    grid-template-rows: auto 1fr;
+    grid-template-areas: 'top top' 'center bottom';
     column-gap: 28px;
     row-gap: 14px;
     padding-left: calc(env(safe-area-inset-left, 0px) + 20px);
     padding-right: calc(env(safe-area-inset-right, 0px) + 20px);
-  }
-
-  .driver:not([data-mode='on']) .driver__bottom {
-    grid-row: 2 / 4;
   }
 
   .driver__go {
@@ -305,14 +306,13 @@ button:disabled {
     font-size: 36px;
   }
 
-  /* The seat buttons fill the right column, above Go offline. */
-  .seat {
-    height: auto;
-    min-height: 96px;
+  .driver__beacon {
+    width: min(26vh, 110px);
+    margin: 10px auto;
   }
 
   .driver__off {
-    height: 52px;
+    height: 56px;
   }
 }
 

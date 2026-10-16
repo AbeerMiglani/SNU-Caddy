@@ -3,7 +3,8 @@
 //   signed in with a verified @snu.edu.in account
 //   AND the phone is on campus
 //   AND the app is on screen
-//   AND demo mode is off (the demo has its own fake data).
+//   AND demo mode is off (the demo has its own fake data)
+//   AND the student touched the app in the last few minutes (idle pause).
 
 import {
   finishRedirect,
@@ -95,6 +96,7 @@ export function createStudentGate(els, { onLive, onChange }) {
   let fence = null;
   let fenceAt = 0;
   let demo = false;
+  let paused = false;
   let live = false;
   let checking = false;
   let recheckTimer = 0;
@@ -103,7 +105,7 @@ export function createStudentGate(els, { onLive, onChange }) {
   const signedIn = () => isSnuUser(user);
 
   function updateLive() {
-    const on = !demo && !document.hidden && signedIn() && fence?.kind === 'inside';
+    const on = !demo && !paused && !document.hidden && signedIn() && fence?.kind === 'inside';
     if (on === live) return;
     live = on;
     onLive(on, { fb, user });
@@ -269,8 +271,17 @@ export function createStudentGate(els, { onLive, onChange }) {
       else scheduleRecheck();
       render();
     },
+    /** Idle pause (main.js): no touch for a few minutes stops live data. */
+    setPaused(on) {
+      paused = on;
+      updateLive();
+    },
     get live() {
       return live;
+    },
+    /** True when live data would run if the app were not paused. */
+    get ready() {
+      return !demo && signedIn() && fence?.kind === 'inside';
     },
   };
 }

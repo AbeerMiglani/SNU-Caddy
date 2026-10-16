@@ -31,9 +31,11 @@
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
   --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.14);
 
-  --status-open: #06c167;
-  --status-full: #e11900;
-  --status-offline: #9e9e9e;
+  /* Caddy states (colour is never the only signal: each has a text pill too). */
+  --state-moving: #06c167;
+  --state-parked: #276ef1;
+  --state-lost: #f59e0b;
+  --state-offline: #9e9e9e;
   --error-text: #c41700; /* 6.0:1 on white */
 
   --caddy-body: #000000;
@@ -259,7 +261,7 @@ button {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--status-open);
+  background: var(--state-moving);
 }
 
 .fabs {
@@ -561,7 +563,7 @@ button {
   margin-top: 2px;
 }
 
-.row[data-status='offline'] .row__title {
+.row[data-state='offline'] .row__title {
   color: var(--muted);
 }
 
@@ -586,7 +588,8 @@ button {
   background: var(--dot);
 }
 
-.row[data-status='open'] .pill {
+/* A moving caddy is the one to catch: its pill stands out. */
+.row[data-state='moving'] .pill {
   background: var(--fg);
   color: var(--bg);
 }
@@ -595,20 +598,24 @@ button {
   background: var(--surface);
 }
 
-.row.is-selected[data-status='open'] .pill {
+.row.is-selected[data-state='moving'] .pill {
   background: var(--fg);
 }
 
-[data-status='open'] {
-  --dot: var(--status-open);
+[data-state='moving'] {
+  --dot: var(--state-moving);
 }
 
-[data-status='full'] {
-  --dot: var(--status-full);
+[data-state='parked'] {
+  --dot: var(--state-parked);
 }
 
-[data-status='offline'] {
-  --dot: var(--status-offline);
+[data-state='lost'] {
+  --dot: var(--state-lost);
+}
+
+[data-state='offline'] {
+  --dot: var(--state-offline);
 }
 
 /* Empty state */
@@ -683,6 +690,43 @@ button {
 .sheet.is-gated .list,
 .sheet.is-gated .empty {
   display: none !important;
+}
+
+/* Live data is loading: no "No caddies online" flash before the first data. */
+.sheet.is-loading .empty {
+  visibility: hidden;
+}
+
+/* Idle pause: a small chip under the top bar. Any touch resumes. */
+.paused-chip {
+  position: fixed;
+  top: calc(var(--safe-top) + 64px);
+  left: 50%;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fg);
+  color: var(--bg);
+  box-shadow: var(--shadow-sm);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+
+.paused-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--state-lost);
 }
 
 .gate {
@@ -999,9 +1043,14 @@ button {
   box-shadow: 0 0 0 2px var(--surface);
 }
 
-.caddy-marker[data-status='offline'] {
-  --caddy-body: var(--status-offline);
-  --caddy-wheel: var(--status-offline);
+/* Signal lost: the last known place, dimmed. */
+.caddy-marker[data-state='lost'] .caddy__body {
+  opacity: 0.45;
+}
+
+.caddy-marker[data-state='offline'] {
+  --caddy-body: var(--state-offline);
+  --caddy-wheel: var(--state-offline);
   --caddy-roof: var(--line-strong);
 }
 
@@ -1031,9 +1080,9 @@ button {
   stroke: none;
 }
 
-.row[data-status='offline'] {
-  --caddy-body: var(--status-offline);
-  --caddy-wheel: var(--status-offline);
+.row[data-state='offline'] {
+  --caddy-body: var(--state-offline);
+  --caddy-wheel: var(--state-offline);
 }
 
 /* ------------------------------------------- Narrow phones (iPhone SE) -- */

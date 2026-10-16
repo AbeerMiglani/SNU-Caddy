@@ -7,7 +7,8 @@
 
 import { FIREBASE_CONFIG } from './firebase-config.js';
 
-const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
+/** Firebase JS SDK (ES modules). The service worker caches these files too. */
+export const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
 
 /** Local emulator mode: only on localhost, and only with ?emulator=1 in the URL. */
 const isLocalhost = ['localhost', '127.0.0.1'].includes(location.hostname);
@@ -68,6 +69,8 @@ export function loadFirebase() {
 
 /** Resolve when the database connection is up; reject after `ms` (offline). */
 export function waitConnected(fb, ms = 10_000) {
+  // The student map closes the connection while live data is off (js/live.js).
+  fb.D.goOnline(fb.db);
   return new Promise((resolve, reject) => {
     let off = () => {};
     const timer = setTimeout(() => {

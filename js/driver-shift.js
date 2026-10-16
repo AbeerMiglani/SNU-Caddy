@@ -16,28 +16,29 @@ import { bearingDeg, distanceM } from './lib/geo.js';
 import { createPingGate } from './lib/ping-gate.js';
 
 /**
- * @typedef {'open'|'full'} SeatStatus
  * @typedef {object} Store  The caddy's database node, as the engine needs it.
- * @property {(f: { lat: number, lng: number, accuracy: number, bearing?: number, status: SeatStatus }) => Promise<void>} sendPosition
- *   One update with online:true and lastUpdated = server time.
- * @property {(f: object) => Promise<void>} setFields   A plain update ({ status } or { online: false }).
+ * @property {(f: { lat: number, lng: number, accuracy: number, bearing?: number }, o: { moved: boolean }) => Promise<void>} sendPosition
+ *   One update with online:true and lastUpdated = server time; with `moved`,
+ *   also movedAt = server time.
+ * @property {(f: object) => Promise<void>} setFields   A plain update ({ online: false }).
  * @property {() => Promise<void>} armDisconnect        onDisconnect: online:false.
  * @property {() => Promise<void>} cancelDisconnect
  * @property {(cb: (connected: boolean) => void) => () => void} onConnection
  *
  * @typedef {object} ShiftState
  * @property {'idle'|'on'} mode
- * @property {SeatStatus} status
  * @property {boolean} connected
- * @property {'waiting'|'ok'|'weak'|'lost'|'outside'|'unavailable'} gps
+ * @property {'waiting'|'ok'|'weak'|'approximate'|'lost'|'outside'|'unavailable'} gps
  * @property {number|null} accuracy   metres, newest fix (also a blurry one)
  * @property {number|null} sentAt     phone time of the last confirmed position write
  * @property {boolean} refused        the server refused several writes in a row
  * @property {number|null} since      shift start (phone time)
+ * @property {number|null} gpsSince   when this search for GPS started (GO or resume)
  * @property {null|'driver'|'paused'|'denied'|'revoked'} ended   why the last shift ended
  */
 
 const round = (x, digits) => Number(x.toFixed(digits));
+const isNum = (x) => typeof x === 'number' && Number.isFinite(x);
 
 /**
  * @param {object} deps
@@ -56,13 +57,13 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   /** @type {ShiftState} */
   const state = {
     mode: 'idle',
-    status: 'open',
     connected: false,
     gps: 'waiting',
     accuracy: null,
     sentAt: null,
     refused: false,
     since: null,
+    gpsSince: null,
     ended: null,
   };
 
@@ -72,8 +73,10 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let pumpTimer = null;
   let oneShotAt = 0; // a getCurrentPosition() call is running since then (0 = none)
   let lastFixAt = 0; // any fix, also a blurry one
+  let sharpAt = 0; // last sharp fix (on or off campus)
   let good = null; // newest sharp, on-campus fix
   let sent = null; // last fix the server confirmed
+  let moveAnchor = null; // where the caddy was when it last counted as moving
   let bearing = null; // last known direction of travel
   let want = null; // why the next position write is needed; null = nothing to send
   let inFlight = false;
@@ -82,12 +85,12 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let failures = 0;
   let holdUntil = 0; // back-off after refused writes
   let armed = false; // onDisconnect is registered on the current connection
-  let wrote = false; // this shift's data is in the database
+  let issued = false; // a position write of this shift went to the SDK (maybe not confirmed yet)
   let offCampusMarked = false;
   let hiddenAt = null;
 
   const emit = () => onChange?.({ ...state });
-  const save = () => persist.save({ status: state.status, since: state.since, aliveAt: now() });
+  const save = () => persist.save({ since: state.since, aliveAt: now() });
 
   // --- Connection (also while idle, so the screen can show it) --------------
   const offConnection = store.onConnection((up) => {
@@ -119,8 +122,8 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   }
 
   function directionTo(fix) {
-    const hasHeading = typeof fix.heading === 'number' && Number.isFinite(fix.heading);
-    const slow = typeof fix.speed === 'number' && fix.speed <= 0.5;
+    const hasHeading = isNum(fix.heading);
+    const slow = isNum(fix.speed) && fix.speed <= 0.5;
     if (hasHeading && !slow) bearing = fix.heading;
     else if (!hasHeading && sent && distanceM(sent, fix) >= GPS_RULES.minMoveM) {
       bearing = bearingDeg(sent, fix);
@@ -129,22 +132,36 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     return bearing === null ? null : Math.round(bearing) % 360;
   }
 
+  /**
+   * Is the caddy really driving (for "Moving" / "Parked" on the student map)?
+   * GPS speed is the best signal. Without it, the caddy must have left both
+   * a minimum distance and its error radius since it last counted as moving,
+   * so GPS noise cannot make a parked caddy "move".
+   */
+  function isMoving(fix) {
+    if (isNum(fix.speed)) return fix.speed >= DRIVER.movingSpeedMs;
+    if (!moveAnchor) return false;
+    return distanceM(moveAnchor, fix) >= Math.max(DRIVER.movingMinM, fix.accuracy);
+  }
+
   function send(fix) {
     const myGen = gen;
     const reason = want;
     want = null;
     inFlight = true;
+    issued = true;
     writeStartedAt = now();
     const fields = {
       lat: round(fix.lat, 6), // 6 decimals = 0.1 m
       lng: round(fix.lng, 6),
       accuracy: round(fix.accuracy, 1),
-      status: state.status,
     };
     const dir = directionTo(fix);
     if (dir !== null) fields.bearing = dir;
+    const moved = isMoving(fix);
+    if (moved || !moveAnchor) moveAnchor = fix;
 
-    store.sendPosition(fields).then(
+    store.sendPosition(fields, { moved }).then(
       () => {
         inFlight = false;
         ackAt = now();
@@ -152,7 +169,6 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
         holdUntil = 0;
         if (myGen !== gen) return;
         sent = fix;
-        wrote = true;
         offCampusMarked = false;
         state.sentAt = ackAt;
         state.refused = false;
@@ -190,7 +206,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     const c = pos.coords;
     const t = now();
     lastFixAt = t;
-    state.accuracy = Number.isFinite(c.accuracy) ? Math.round(c.accuracy) : null;
+    state.accuracy = isNum(c.accuracy) ? Math.round(c.accuracy) : null;
     const fix = {
       lat: c.latitude,
       lng: c.longitude,
@@ -200,11 +216,19 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
       t, // phone receive time: some phones put GPS time with an offset in pos.timestamp
     };
 
-    if (!(typeof c.accuracy === 'number' && c.accuracy <= GPS_RULES.maxAccuracyM)) {
-      state.gps = 'weak'; // students keep the last good position
+    if (!(isNum(c.accuracy) && c.accuracy <= GPS_RULES.maxAccuracyM)) {
+      // Students keep the last good position. A blurry fix says nothing
+      // about campus, so "outside" stays until a sharp fix is back inside.
+      if (isNum(c.accuracy) && c.accuracy > DRIVER.approximateM) state.gps = 'approximate';
+      else if (state.gps === 'outside') {
+        /* keep */
+      } else if (sharpAt && t - sharpAt >= DRIVER.weakAfterMs) state.gps = 'weak';
+      else if (!sharpAt) state.gps = 'waiting';
+      // else: one blurry fix between sharp ones is normal; no flicker on the screen.
       emit();
       return;
     }
+    sharpAt = t;
     if (!onCampus(fix.lat, fix.lng)) {
       state.gps = 'outside';
       good = null;
@@ -225,8 +249,9 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
 
   /** Off campus: the location is not shared, and students see the caddy as offline. */
   function markOffCampus() {
-    if (offCampusMarked || !wrote) return;
+    if (offCampusMarked || !issued) return;
     offCampusMarked = true;
+    // The SDK keeps the order of writes: this lands after a write still in flight.
     store.setFields({ online: false }).catch(() => {
       offCampusMarked = false;
     });
@@ -304,34 +329,36 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
 
   // --- Shift ------------------------------------------------------------------
   /**
-   * Start a shift. `resume` continues a shift after a reload, with its seat
-   * status and start time.
-   * @param {{ status?: SeatStatus, since?: number }} [resume]
+   * Start a shift. `resume` continues a shift after a reload, with its start time.
+   * @param {{ since?: number }} [resume]
    */
   function go(resume) {
     if (state.mode === 'on') return;
     gen += 1;
     const myGen = gen;
+    const t = now();
     Object.assign(state, {
       mode: 'on',
-      status: resume?.status === 'full' ? 'full' : 'open',
       gps: 'waiting',
       accuracy: null,
       sentAt: null,
       refused: false,
-      since: resume?.since ?? now(),
+      since: resume?.since ?? t,
+      gpsSince: t,
       ended: null,
     });
     gate.reset();
     good = null;
     sent = null;
+    moveAnchor = null;
     bearing = null;
     want = 'start';
     failures = 0;
     holdUntil = 0;
-    wrote = false;
+    issued = false;
     offCampusMarked = false;
     lastFixAt = 0;
+    sharpAt = 0;
     oneShotAt = 0;
     hiddenAt = null;
 
@@ -358,7 +385,9 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     want = null;
     wake.release();
     // A revoked phone may not write any more (the admin page set online:false).
-    if (wrote && reason !== 'revoked') {
+    // `issued`, not "confirmed": a first write still waiting in the SDK reaches
+    // the server later, and the online:false below must land after it.
+    if (issued && reason !== 'revoked') {
       // Students first, then remove the server-side hook. Offline, the SDK
       // sends both when the phone reconnects (the server ran onDisconnect anyway).
       store.setFields({ online: false }).catch(() => {});
@@ -370,20 +399,10 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
       gps: 'waiting',
       accuracy: null,
       refused: false,
+      gpsSince: null,
       ended: reason,
     });
     persist.clear();
-    emit();
-  }
-
-  /** @param {SeatStatus} status */
-  function setStatus(status) {
-    if (status !== 'open' && status !== 'full') return;
-    if (state.mode !== 'on' || status === state.status) return;
-    state.status = status;
-    save();
-    // Every position write carries the status too, so a lost tap heals itself.
-    if (wrote && !offCampusMarked) store.setFields({ status }).catch(() => {});
     emit();
   }
 
@@ -398,7 +417,6 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   return {
     go,
     stop,
-    setStatus,
     dispose,
     get state() {
       return { ...state };

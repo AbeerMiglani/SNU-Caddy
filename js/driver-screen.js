@@ -1,4 +1,4 @@
-// The OLED-black driver screen: GO, Seats open / Full, Go offline.
+// The OLED-black driver screen: GO, then "Online & broadcasting", then Go offline.
 //
 // Pure black, no map, little lit text. The phone needs no login: it is the
 // anonymous account that the one-time QR setup linked to one caddy. An admin's
@@ -8,13 +8,16 @@ import { DRIVER, GEOFENCE } from './config.js';
 import { CAMPUS_POLYGON } from './data/campus.js';
 import { CADDY_ID_RE, clearBinding, readBinding, saveBinding } from './driver.js';
 import { createShift } from './driver-shift.js';
-import { FIREBASE_ON, loadFirebase } from './firebase.js';
+import { FIREBASE_ON, SDK, loadFirebase } from './firebase.js';
 import { distanceOutsideM } from './lib/polygon.js';
 import { createWakeLock } from './lib/wake-lock.js';
 
 const SHIFT_KEY = 'snucaddy.shift';
 const DIM_AFTER_MS = 20_000;
 const CONFIRM_OFF_MS = 4000;
+/** A warning must last this long before it lights a dimmed screen (no flicker). */
+const WARN_WAKE_MS = 10_000;
+const RETRY_MS = 20_000;
 const NOT_LINKED = 'This phone is no longer linked. Ask an admin for a new setup code.';
 
 const $ = (id) => document.getElementById(id);
@@ -23,13 +26,12 @@ const els = {
   net: $('driver-net'),
   label: $('driver-label'),
   name: $('driver-name'),
+  beacon: $('driver-beacon'),
   status: $('driver-status'),
   meta: $('driver-meta'),
-  seats: $('driver-seats'),
-  open: $('seat-open'),
-  full: $('seat-full'),
   go: $('driver-go'),
   off: $('driver-off'),
+  retry: $('driver-retry'),
 };
 
 /** Everything the screen shows comes from here (see render()). */
@@ -40,6 +42,8 @@ const ui = {
   bootNet: 'wait',
   /** Set when the phone lost its link: the screen shows only this. */
   unlinked: null,
+  /** The saved shift was too old to continue (the app was closed for a long time). */
+  pausedHint: false,
   /** @type {'on'|'off'|'lost'|'unsupported'} */
   wake: 'off',
   /** @type {import('./driver-shift.js').ShiftState | null} */
@@ -80,12 +84,8 @@ async function boot(link) {
       setBoot('Firebase is not set up yet (docs/FIREBASE_SETUP.md).', 'warn', null);
       return;
     }
-    setBoot(
-      'No connection. This phone stays linked. The screen reloads when it is online.',
-      'warn',
-      'bad',
-    );
-    window.addEventListener('online', () => location.reload(), { once: true });
+    setBoot('No connection. This phone stays linked. It tries again by itself.', 'warn', 'bad');
+    retryWhenOnline();
     return;
   }
 
@@ -116,13 +116,18 @@ async function boot(link) {
     },
   });
 
+  render(); // createShift() reported its first state before `shift` was set: enable GO now.
+
   // A reload (or a crash) during a shift continues it. GO also works offline:
   // the phone starts sharing as soon as it is online.
   const saved = readSavedShift(link.caddyId);
   if (saved && Date.now() - saved.aliveAt < DRIVER.resumeWithinMs) {
-    shift.go({ status: saved.status, since: saved.since });
-  } else {
+    shift.go({ since: saved.since });
+  } else if (saved) {
+    // Android often discards an app that stays in the background: say why GO is back.
+    ui.pausedHint = true;
     persist.clear();
+    render();
   }
 
   watchLink(fb, user, link);
@@ -187,7 +192,13 @@ function caddyStore(fb, caddyId) {
   const { D, db } = fb;
   const node = D.ref(db, `caddies/${caddyId}`);
   return {
-    sendPosition: (f) => D.update(node, { ...f, online: true, lastUpdated: D.serverTimestamp() }),
+    sendPosition: (f, { moved }) =>
+      D.update(node, {
+        ...f,
+        ...(moved ? { movedAt: D.serverTimestamp() } : {}),
+        online: true,
+        lastUpdated: D.serverTimestamp(),
+      }),
     setFields: (f) => D.update(node, f),
     armDisconnect: () => D.onDisconnect(node).update({ online: false }),
     cancelDisconnect: () => D.onDisconnect(node).cancel(),
@@ -219,22 +230,37 @@ function setBoot(text, tone, net) {
   render();
 }
 
+/**
+ * The Firebase SDK did not download. A failed module import can only be
+ * retried with a reload, but a reload without a network could show the
+ * browser's offline page. So: first check that the SDK can be reached, then
+ * reload. The "online" event alone is not enough (a phone with mobile data
+ * but no real connection counts as online all the time).
+ */
+function retryWhenOnline() {
+  els.retry.hidden = false;
+  const probe = async () => {
+    if (document.visibilityState !== 'visible') return;
+    try {
+      await fetch(`${SDK}/firebase-app.js`, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' });
+      location.reload();
+    } catch {
+      /* still no connection */
+    }
+  };
+  setInterval(probe, RETRY_MS);
+  window.addEventListener('online', probe);
+}
+
 // --- Controls -------------------------------------------------------------------
 els.go.addEventListener('click', () => {
   if (!shift || ui.unlinked) return;
   buzz();
+  ui.pausedHint = false;
   shift.go(); // in the tap itself: the wake lock and the location prompt need it
 });
 
-for (const [btn, status] of [
-  [els.open, 'open'],
-  [els.full, 'full'],
-]) {
-  btn.addEventListener('click', () => {
-    if (ui.shift?.status !== status) buzz();
-    shift?.setStatus(status);
-  });
-}
+els.retry.addEventListener('click', () => location.reload());
 
 // Go offline needs two taps, so a brush against the phone cannot end the shift.
 let offTimer = null;
@@ -311,19 +337,33 @@ function render() {
 
   const [text, tone] = statusLine(s);
   if (els.status.textContent !== text) els.status.textContent = text; // role=status: say changes only
-  // A new warning (no GPS, no internet, …) lights a dimmed screen up again.
-  if (tone !== els.status.dataset.tone && (tone === 'warn' || tone === 'error')) wakeScreen();
+  lightUpFor(tone);
   els.status.dataset.tone = tone;
+  els.root.dataset.tone = tone; // colours the beacon
   els.meta.textContent = metaLine(s, on);
 
-  els.seats.hidden = !on;
-  els.open.setAttribute('aria-pressed', String(s?.status === 'open'));
-  els.full.setAttribute('aria-pressed', String(s?.status === 'full'));
-  els.root.dataset.seat = s?.status ?? 'open';
-
+  els.beacon.toggleAttribute('hidden', !on); // an SVG element has no .hidden property
   els.go.hidden = on || Boolean(ui.unlinked);
   els.go.disabled = !shift;
   els.off.hidden = !on;
+  if (shift || ui.unlinked) els.retry.hidden = true;
+}
+
+/** A problem lights a dimmed screen again: an error at once, a warning after 10 s. */
+let warnSince = null;
+let warnShown = false;
+function lightUpFor(tone) {
+  if (tone === 'error' && els.status.dataset.tone !== 'error') wakeScreen();
+  if (tone !== 'warn') {
+    warnSince = null;
+    warnShown = false;
+    return;
+  }
+  warnSince ??= Date.now();
+  if (!warnShown && Date.now() - warnSince >= WARN_WAKE_MS) {
+    warnShown = true;
+    wakeScreen();
+  }
 }
 
 /** @returns {[string, 'dim'|'ok'|'warn'|'error']} */
@@ -337,7 +377,7 @@ function statusLine(s) {
         'error',
       ];
     }
-    if (s.ended === 'paused') {
+    if (s.ended === 'paused' || ui.pausedHint) {
       return [
         'Your shift ended: the app was closed for over 10 minutes. Tap GO to start again.',
         'warn',
@@ -346,23 +386,36 @@ function statusLine(s) {
     if (s.ended === 'driver') return ['You are offline. Students no longer see this caddy.', 'dim'];
     return ['Tap GO to start your shift.', 'dim'];
   }
-  if (s.refused)
+  if (s.refused) {
     return ['The server refuses the updates. Ask an admin to check this caddy.', 'error'];
+  }
   if (s.gps === 'outside') return ['Outside campus. Your location is not shared.', 'warn'];
-  if (s.gps === 'unavailable')
+  if (s.gps === 'unavailable') {
     return ['Location is off. Turn on Location in the phone settings.', 'error'];
-  if (!s.connected)
+  }
+  if (s.gps === 'approximate') {
+    return [
+      'Location is not precise. Turn on “Precise location” for Chrome: phone Settings → Apps → Chrome → Permissions → Location.',
+      'error',
+    ];
+  }
+  if (!s.connected) {
     return ['No internet. Your location is sent again when the signal is back.', 'warn'];
+  }
   if (s.gps === 'waiting') {
-    const long = Date.now() - s.since > DRIVER.gpsLostMs;
-    return [long ? 'Still looking for GPS. Go to an open area.' : 'Finding your location…', 'dim'];
+    return Date.now() - s.gpsSince > DRIVER.gpsLostMs
+      ? ['Still looking for GPS. Go to an open area.', 'warn']
+      : ['Finding your location…', 'dim'];
   }
   if (s.gps === 'lost') return ['No GPS signal. Go to an open area.', 'warn'];
   if (s.gps === 'weak') {
-    return [`GPS is weak (±${s.accuracy} m). Students see your last good location.`, 'warn'];
+    // The error radius is in the meta line: the live status text stays still.
+    return s.sentAt === null
+      ? ['GPS is weak. Waiting for a sharper fix.', 'warn']
+      : ['GPS is weak. Students see your last good position.', 'warn'];
   }
   if (s.sentAt === null) return ['Sending your location…', 'dim'];
-  return ['You are online. Students can see you.', 'ok'];
+  return ['Online & broadcasting', 'ok'];
 }
 
 function metaLine(s, on) {
@@ -388,6 +441,14 @@ function since(t) {
   if (min < 1) return 'just started';
   if (min < 60) return `${min} min`;
   return `${Math.floor(min / 60)} h ${min % 60} min`;
+}
+
+// Offline app shell (sw.js): the app opens in a dead zone, too. It is not
+// needed for the first paint, so it registers after the page has loaded.
+if ('serviceWorker' in navigator) {
+  const register = () => navigator.serviceWorker.register('sw.js').catch(() => {});
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register, { once: true });
 }
 
 // --- Start (last, so that everything above is defined) ---------------------------

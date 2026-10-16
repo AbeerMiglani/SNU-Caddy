@@ -1,14 +1,14 @@
 {
   "name": "snu-caddy",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Live campus caddy tracker for Shiv Nadar University (PWA, no build step).",
   "type": "module",
   "scripts": {
     "serve": "python3 -m http.server 8000",
     "emulators": "firebase emulators:start --project demo-snu-caddy",
-    "test": "firebase emulators:exec --only database --project demo-snu-caddy \"node --test --test-concurrency=1 tests/database.rules.test.mjs tests/driver-shift.test.mjs tests/modulepreload.test.mjs\"",
-    "test:unit": "node --test tests/driver-shift.test.mjs tests/modulepreload.test.mjs",
+    "test": "firebase emulators:exec --only database --project demo-snu-caddy \"node --test --test-concurrency=1 tests/database.rules.test.mjs tests/driver-shift.test.mjs tests/modulepreload.test.mjs tests/sw.test.mjs tests/csp.test.mjs\"",
+    "test:unit": "node --test tests/driver-shift.test.mjs tests/modulepreload.test.mjs tests/sw.test.mjs tests/csp.test.mjs",
     "deploy": "firebase deploy --only hosting,database"
   },
   "devDependencies": {

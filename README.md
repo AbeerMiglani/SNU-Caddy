@@ -7,8 +7,8 @@ It is a mobile web app (PWA): plain HTML, CSS and JavaScript, with no build step
 | ----- | ---- | ------ |
 | 1 | Full-screen campus map, bottom sheet, theme pill (Auto / Light / Dark), demo / pitch mode | Done |
 | 2 | Firebase project, `@snu.edu.in` Google login, campus geofence, QR driver-phone binding, admin dashboard, security rules + tests | Done |
-| 3 | OLED-black driver screen: GO, Seats open / Full, GPS throttling, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
-| 4 | Live caddies on the student map, 90 s "Signal lost", service worker | Next |
+| 3 | OLED-black driver screen: GO → Online & broadcasting → Go offline, GPS throttling, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
+| 4 | Live caddies on the student map (Moving / Parked / Signal lost / Offline), idle pause, service worker, strict CSP | Done |
 
 - **For the SNU IT department:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
   (system design, security rules, threat model, free-tier budget, edge cases).
@@ -49,8 +49,8 @@ The automated tests start their own emulator, so stop `npm run emulators`
 (Ctrl-C) first:
 
 ```bash
-npm test                   # 31 security-rule tests + 22 driver-shift tests + 2 page checks
-npm run test:unit          # only the driver-shift and page tests (no Java needed)
+npm test                   # 32 security-rule tests + 36 unit tests
+npm run test:unit          # only the unit tests (no Java needed)
 ```
 
 ### Open it on your phone
@@ -78,7 +78,8 @@ A linked phone opens straight into the black driver screen. No login.
 
 1. Tap **GO**. The phone keeps its screen on and starts to share its
    location. The first time, Chrome asks for location: tap **Allow**.
-2. Tap **Seats open** or **Full** when it changes. Students see it at once.
+2. Drive. The screen stays black and says **Online & broadcasting**. The
+   driver taps nothing while driving.
 3. At the end of the shift, tap **Go offline** twice.
 
 What the phone sends: a position when the caddy moved 5 m, or every 30 s
@@ -111,10 +112,26 @@ SNU roads, and a fourth caddy is parked and offline:
 
 | Caddy | Route | Shows |
 | ----- | ----- | ----- |
-| Caddy 01 | Gate shuttle: Main Gate, Management Block, Library, A Block, Research Annexe, Gate 2 (4.0 km) | Seats open / Full |
-| Caddy 02 | Hostel loop: Hostel 3A, DH2, DH3, Indoor Sports Complex, Hostel 2B, DH1, Library, Health Centre (2.2 km) | Full / Seats open |
-| Caddy 03 | Academic loop: D Block, Library, Hostel 1A, Auctus Supermarket, Management Block, C Block (1.7 km) | Seats open / Full |
+| Caddy 01 | Gate shuttle: Main Gate, Management Block, Library, A Block, Research Annexe, Gate 2 (4.0 km) | Moving |
+| Caddy 02 | Hostel loop: Hostel 3A, DH2, DH3, Indoor Sports Complex, Hostel 2B, DH1, Library, Health Centre (2.2 km) | Moving |
+| Caddy 03 | Academic loop: D Block, Library, Hostel 1A, Auctus Supermarket, Management Block, C Block (1.7 km) | Parked at D Block (a 100 s break), then Moving |
 | Caddy 04 | Parked at Parking 1 | Offline |
+
+## What students see
+
+Each caddy shows its name, where it is ("Near Library"), how long ago it
+updated, and one of four states:
+
+| State | Means |
+| ----- | ----- |
+| **Moving** | Online, and it really moved in the last 60 s |
+| **Parked** | Online, but no real move for 60 s or more |
+| **Signal lost** | Online, but no data for 90 s (dead zone); the icon is dimmed |
+| **Offline** | The driver went offline, or the phone lost its connection |
+
+Live data runs only while the app is on screen, on campus and signed in.
+After 5 minutes without a touch it pauses ("Live updates paused · Tap to
+resume") and closes its database connection.
 
 Each virtual caddy acts like a real driver phone. It makes one GPS fix per
 second with a small error, and sometimes a blurry fix (> 20 m). The same
@@ -124,8 +141,7 @@ rules as the real driver screen decide what is sent:
 - A fix is sent only if the caddy moved 5 m, or 30 s passed (heartbeat).
 
 The student map then glides each icon between pings and turns it to face the
-direction of travel. Phase 4 replaces the simulator with Firebase, and the
-map code stays the same.
+direction of travel. Live data from Firebase uses the same map code.
 
 The demo is repeatable: it uses a fixed random seed, so every pitch looks the same.
 
@@ -135,7 +151,10 @@ The demo is repeatable: it uses a fixed random seed, so every pitch looks the sa
 - **Glide animation** runs in one shared loop capped at 30 fps, and stops when no caddy moves.
 - **Turning** uses a CSS transition (GPU), not JavaScript frames.
 - **Page hidden** (app switched or phone locked): the demo clock, label timers and
-  geofence re-checks stop. In Phase 4 the database connection closes here too.
+  geofence re-checks stop, and the database connection closes.
+- **Idle pause**: after 5 minutes without a touch, live updates stop and the
+  database connection closes. A tap resumes them.
+- **Service worker**: repeat visits load the app from the phone; it opens in dead zones too.
 - **Geofence**: one quick, low-accuracy location check when the app opens, then one
   every 5 minutes while it stays on screen. No continuous GPS on student phones.
 - **Driver phones** open `driver.html`: no map, no tiles, no Leaflet, pure black.
@@ -167,12 +186,14 @@ js/
   enroll.js             setup codes, QR scanner, atomic enrollment
   enroll-ui.js          hidden 5-tap setup dialog
   driver.js             driver binding (stored on the phone)
-  driver-screen.js      driver screen: GO, seats, Go offline, live revoke check
+  driver-screen.js      driver screen: GO, Online & broadcasting, Go offline, revoke check
   driver-shift.js       shift engine: GPS filter, rate limit, onDisconnect, recovery
   admin.js              admin dashboard
   map.js                Leaflet map, campus lock, tile cross-fade
   caddy-layer.js        caddy icons: glide + rotate
   caddy-list.js         list rows in the sheet
+  caddy-state.js        Moving / Parked / Signal lost / Offline
+  live.js               live caddies from Firebase; closes the connection when idle
   sheet.js              bottom sheet drag / snap (side panel on laptops)
   theme.js              Auto / Light / Dark pill
   demo.js               demo simulator
@@ -182,8 +203,11 @@ js/
   lib/wake-lock.js      Screen Wake Lock, taken again after the app was hidden
   data/campus.js        GENERATED: fence polygon, landmarks
   data/demo-routes.js   GENERATED: demo routes on real roads
-tests/database.rules.test.mjs   31 security-rule tests (npm test)
-tests/driver-shift.test.mjs     22 shift-engine tests: fake GPS, database, timers
+sw.js                   service worker: app shell for dead zones (never live data)
+tests/database.rules.test.mjs   32 security-rule tests (npm test)
+tests/driver-shift.test.mjs     28 shift-engine tests: fake GPS, database, timers
+tests/sw.test.mjs               the service worker saves every module it needs
+tests/csp.test.mjs              the CSP allows exactly the inline scripts (by hash)
 tests/modulepreload.test.mjs    keeps the preload lists in index.html and driver.html in sync
 tools/build_campus_data.py      makes the two data files from OpenStreetMap
 docs/                   architecture + Firebase setup guide

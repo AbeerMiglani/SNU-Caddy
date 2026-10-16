@@ -40,7 +40,7 @@
   </head>
   <body>
     <!-- OLED driver screen: pure black, no map, little lit text, big controls. -->
-    <main class="driver" id="driver" data-mode="boot" data-seat="open">
+    <main class="driver" id="driver" data-mode="boot" data-tone="dim">
       <header class="driver__top">
         <span class="driver__app">SNU Caddy · Driver</span>
         <span class="driver__net" id="driver-net" data-state="wait">Connecting…</span>
@@ -49,19 +49,22 @@
       <section class="driver__center">
         <p class="driver__label" id="driver-label">This phone drives</p>
         <h1 class="driver__name" id="driver-name">…</h1>
+        <!-- On shift: a still beacon. Its colour follows the status line below. -->
+        <svg
+          class="driver__beacon"
+          id="driver-beacon"
+          viewBox="0 0 120 120"
+          aria-hidden="true"
+          hidden
+        >
+          <circle class="beacon__ring beacon__ring--outer" cx="60" cy="60" r="56" />
+          <circle class="beacon__ring" cx="60" cy="60" r="38" />
+          <circle class="beacon__dot" cx="60" cy="60" r="16" />
+        </svg>
         <p class="driver__status" id="driver-status" role="status" data-tone="dim">
           Checking link…
         </p>
         <p class="driver__meta" id="driver-meta"></p>
-      </section>
-
-      <section class="driver__seats" id="driver-seats" aria-label="Seats" hidden>
-        <button class="seat seat--open" id="seat-open" type="button" aria-pressed="true">
-          <span class="seat__dot" aria-hidden="true"></span>Seats open
-        </button>
-        <button class="seat seat--full" id="seat-full" type="button" aria-pressed="false">
-          <span class="seat__dot" aria-hidden="true"></span>Full
-        </button>
       </section>
 
       <footer class="driver__bottom">
@@ -69,6 +72,7 @@
         <button class="driver__off" id="driver-off" type="button" data-confirm="false" hidden>
           Go offline
         </button>
+        <button class="driver__retry" id="driver-retry" type="button" hidden>Try again</button>
       </footer>
     </main>
 

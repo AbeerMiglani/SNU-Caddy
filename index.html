@@ -27,8 +27,8 @@
         } catch (e) {}
         // Keep in sync with the imports of js/main.js (checked by tests/modulepreload.test.mjs).
         var modules =
-          'main caddy-layer caddy-list config demo firebase firebase-config map sheet ' +
-          'student-gate auth geofence theme data/campus data/demo-routes lib/geo ' +
+          'main caddy-layer caddy-list caddy-state config demo firebase firebase-config live ' +
+          'map sheet student-gate auth geofence theme data/campus data/demo-routes lib/geo ' +
           'lib/ping-gate lib/polygon lib/five-taps';
         modules.split(' ').forEach(function (m) {
           var link = document.createElement('link');
@@ -119,6 +119,11 @@
       </div>
     </header>
 
+    <!-- Idle pause: live updates stop after a few minutes without a touch. -->
+    <button class="paused-chip" id="paused" type="button" hidden>
+      <span class="paused-chip__dot" aria-hidden="true"></span>Live updates paused · Tap to resume
+    </button>
+
     <!-- Bottom sheet (side panel on wide screens) -->
     <section class="sheet" id="sheet" aria-labelledby="sheet-title">
       <button
@@ -133,7 +138,7 @@
       <div class="sheet__header">
         <div>
           <h1 class="sheet__title" id="sheet-title">Campus caddies</h1>
-          <p class="sheet__summary" id="summary" aria-live="polite">No caddies on shift</p>
+          <p class="sheet__summary" id="summary" aria-live="polite">No caddies online</p>
         </div>
         <button class="switch" id="demo-switch" type="button" role="switch" aria-checked="false">
           <span class="switch__label">Demo</span>
@@ -157,7 +162,7 @@
               <rect class="empty__roof" x="5.5" y="12.5" width="13" height="17" rx="3" />
             </svg>
           </div>
-          <p class="empty__title">No caddies on shift right now</p>
+          <p class="empty__title">No caddies online right now</p>
           <p class="empty__text">Caddies show up here live when a driver taps GO.</p>
           <button class="btn btn--primary" id="empty-demo" type="button">Start demo</button>
         </div>
@@ -178,7 +183,7 @@
         </svg>
         <div class="login__ready">
           <h2 class="login__title" id="login-title">Campus caddies, live.</h2>
-          <p class="login__text">See every SNU caddy on the map, with open seats, as it moves.</p>
+          <p class="login__text">See every SNU caddy on the map as it moves.</p>
           <button class="btn btn--primary" id="login-btn" type="button">
             Continue with SNU Google account
           </button>

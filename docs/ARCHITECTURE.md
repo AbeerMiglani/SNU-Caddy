@@ -4,8 +4,10 @@ This document is for the Shiv Nadar University IT department. It describes
 how SNU Caddy works, how it protects data, how it stays on the free tier,
 and how it handles failures.
 
-- **Product:** a live map of campus caddies (golf-cart shuttles) for students,
-  with seat status (Seats open / Full / Offline).
+- **Product:** a live map of campus caddies (golf-cart shuttles) for students.
+  Each caddy is **Moving**, **Parked**, **Signal lost** or **Offline**, with the
+  time of its last update. (There is no seat status: students hop on and off
+  at every block, so drivers do not tap anything while they drive.)
 - **Platform:** a Progressive Web App (PWA): HTML, CSS and JavaScript. No app
   store. It works on iPhone, Android, and Android without Google Play Services
   (GrapheneOS, LineageOS, CalyxOS).
@@ -29,7 +31,7 @@ flowchart LR
   T["CARTO basemap tiles<br/>(OpenStreetMap data)"]
 
   D -- "writes caddies/{id}<br/>(5 m or 30 s)" --> DB
-  DB -- "WebSocket push (onValue)" --> S
+  DB -- "WebSocket push<br/>(child events, no polling)" --> S
   A -- "fleet, codes, revoke" --> DB
   S & D & A -- "sign-in" --> AU
   S -- "map tiles" --> T
@@ -38,11 +40,12 @@ flowchart LR
 
 | Part | File | Who uses it |
 | ---- | ---- | ----------- |
-| Student app | `index.html`, `js/main.js` | Students and staff with an `@snu.edu.in` Google account |
-| Driver app | `driver.html`, `js/driver.js` | One dedicated Android phone per caddy |
+| Student app | `index.html`, `js/main.js`, `js/live.js` | Students and staff with an `@snu.edu.in` Google account |
+| Driver app | `driver.html`, `js/driver-screen.js`, `js/driver-shift.js` | One dedicated Android phone per caddy |
+| Service worker | `sw.js` | Opens the app shell in dead zones; never caches live data |
 | Admin dashboard | `admin.html`, `js/admin.js` | SNU accounts on the admin list |
 | Security rules | `database.rules.json` | Enforced by Firebase on every read and write |
-| Rules tests | `tests/database.rules.test.mjs` | 29 automated tests (`npm test`) |
+| Tests | `tests/*.test.mjs` | 32 rules tests in the emulator + 36 unit tests (`npm test`) |
 
 ## 2. Roles and sign-in
 
@@ -99,9 +102,9 @@ under a few kilobytes.
       "lat": 28.52471, "lng": 77.57412,  // inside the campus box (rules)
       "bearing": 92,                      // degrees, only while moving
       "accuracy": 6,                      // metres, at most 20 (rules)
-      "status": "open",                   // "open" | "full"
       "online": true,                     // false = off shift / disconnected
-      "lastUpdated": 1792147071000        // server time (rules)
+      "lastUpdated": 1792147071000,       // server time of the last data (rules)
+      "movedAt": 1792147069000            // server time of the last real move (optional)
     }
   },
   "drivers":     { "<anonymous uid>": { "caddyId": "caddy_01", "code": "…", "enrolledAt": 0, "device": "Android 14 · Chrome 130" } },
@@ -111,6 +114,19 @@ under a few kilobytes.
 
 Size: about 200 bytes per caddy. Old setup codes are deleted by the admin
 dashboard (expired ones at once, used ones after 24 hours).
+
+**States on the student map** (`js/caddy-state.js`), from three fields:
+
+| State | Rule | On the map |
+| ----- | ---- | ---------- |
+| Moving | `online` and data less than 90 s old and `movedAt` less than 60 s old | Normal icon, green dot |
+| Parked | `online` and data less than 90 s old, no real move for 60 s | Normal icon, blue dot |
+| Signal lost | `online`, but no data for 90 s or more | Dimmed icon, amber dot |
+| Offline | `online` is `false` (Go offline, or `onDisconnect`) | Grey icon, "last seen …" |
+
+A "real move" is decided on the driver phone: GPS speed of at least 1 m/s,
+or (without speed) at least 10 m and more than the error radius from the
+place of the last move. So GPS noise cannot make a parked caddy "move".
 
 ## 4. Real-time data flow
 
@@ -127,19 +143,26 @@ dashboard (expired ones at once, used ones after 24 hours).
    Then a sender limits the writes: one write in flight at a time, at most
    one every **2 s** (the newest fix wins), never while the connection is
    down. Each write is one `update()` of the caddy object with
-   `online: true`, the seat status and `lastUpdated: ServerValue.TIMESTAMP`.
-   A seat tap (Seats open / Full) is written at once.
+   `online: true` and `lastUpdated: ServerValue.TIMESTAMP`, plus
+   `movedAt: ServerValue.TIMESTAMP` when the caddy really moved.
 2. **Database**: the write overwrites `caddies/{id}`. The rules check the
-   sender, the fields, the campus box, and the server timestamp. A GPS field
-   (lat, lng, bearing, accuracy) can change only together with a new server
-   timestamp, at most once per second per caddy. Status taps (Seats open /
-   Full) and Go offline are human actions and are not rate-limited.
-3. **Student phones**: one WebSocket listener (`onValue` on `caddies`)
-   receives the change. There is **no polling**. The icon glides to the new
-   point and turns to the direction of travel.
-4. **Battery**: student phones listen only while the app is on screen, the
-   student is signed in, and the phone is on campus. When the app is hidden,
-   the app closes the database connection (`goOffline`) and stops timers.
+   sender, the fields, the campus box, and the server timestamps. A GPS field
+   (lat, lng, bearing, accuracy) and `movedAt` can change only together with
+   a new server timestamp, at most once per second per caddy. Going offline
+   is not rate-limited.
+3. **Student phones** (`js/live.js`): child listeners on `caddies` and one
+   listener on `fleet` (names) receive each change over the same WebSocket.
+   There is **no polling**. Server times are moved to the phone's clock with
+   `.info/serverTimeOffset`, so a wrong phone clock cannot fake "Signal
+   lost". The icon glides to the new point and turns to the direction of
+   travel. Every 5 s the app checks the time-based states (Moving → Parked,
+   → Signal lost).
+4. **Connections and battery**: student phones listen only while the app is
+   on screen, the student is signed in, the phone is on campus, demo mode is
+   off, and the student touched the app in the last **5 minutes**. In all
+   other cases the app removes the listeners **and closes the connection**
+   (`goOffline`). A tap brings everything back in about a second. This keeps
+   the number of open connections low (the free plan allows 100).
 
 ### Driver shift: presence and recovery
 
@@ -151,15 +174,19 @@ dashboard (expired ones at once, used ones after 24 hours).
 | Connection back | The newest fix goes out at once with `online: true`, then `onDisconnect` is registered again. |
 | Old connection's `onDisconnect` runs late | Every position write carries `online: true`, so the next write (at most 30 s later) corrects it. |
 | Outside campus | No positions; `online: false` once. Back inside: the next fix makes it online again. |
-| App in the background | The browser stops GPS and timers. Students see "Signal lost" after 90 s (Phase 4). Back within 10 min: the shift continues. After 10 min: the shift ends, so a forgotten phone leaves no ghost caddy. |
-| Reload or crash during a shift | The shift resumes by itself (seat status kept) if it was alive in the last 10 min. |
+| App in the background | The browser stops GPS and timers. Students see "Signal lost" after 90 s. Back within 10 min: the shift continues. After 10 min: the shift ends, so a forgotten phone leaves no ghost caddy. |
+| Reload or crash during a shift | The shift resumes by itself if it was alive in the last 10 min. Otherwise the screen says why GO is back. |
+| Go offline while the first write still waits (dead socket) | `online: false` is still sent; the SDK delivers it after the waiting write, so the caddy ends offline. |
 | Go offline (two taps) | `online: false`, then `onDisconnect` cancelled; GPS and wake lock off. |
 | Admin revokes the phone | The `drivers/{uid}` listener fires: the shift stops at once, the phone returns to the student app. The admin page sets `online: false`. |
 | Writes refused (for example the caddy was removed from the fleet) | Back-off (2, 4, 8 … 30 s); after 3 in a row the screen says "Ask an admin". |
 
-The driver screen is OLED-black: a pure `#000` background, dim text and
-thin rings. It dims after 20 s without a touch and moves its content by a
-few pixels every minute, so hours of a still picture cannot burn in.
+The driver screen is OLED-black: a pure `#000` background, dim text and a
+still beacon (thin rings and a dot) whose colour follows the status: green
+"Online & broadcasting", amber for a warning, red for an error. It dims
+after 20 s without a touch (an error lights it again at once, a warning
+after 10 s) and moves its content by a few pixels every minute, so hours of
+a still picture cannot burn in.
 
 ## 5. Security rules (enforced by Firebase)
 
@@ -173,15 +200,45 @@ few pixels every minute, so hours of a still picture cannot burn in.
 | Everything else | Nobody | Nobody |
 
 Validation on `caddies/{id}`: lat/lng inside the campus box (also protects
-the driver's privacy off campus), `accuracy` ≤ 20 m, `status` is `open` or
-`full`, `bearing` 0–360, `online` boolean, `lastUpdated` = server time, no
-extra fields, and the caddy must exist in `fleet`. GPS fields change only
+the driver's privacy off campus), `accuracy` ≤ 20 m, `bearing` 0–360,
+`online` boolean, `lastUpdated` = server time, `movedAt` = server time (and
+only together with a new `lastUpdated`), no extra fields (a `status` field
+is refused), and the caddy must exist in `fleet`. GPS fields change only
 with a new `lastUpdated`, at most once per second.
 
-The rules are tested with the Firebase Emulator: 31 tests, one per attack
+The rules are tested with the Firebase Emulator: 32 tests, one per attack
 or allowed action, including the exact writes a driver phone makes in a
-shift (`npm test`). The shift engine has 22 more tests with a fake GPS, a
-fake database and fake timers (`npm run test:unit`, no emulator needed).
+shift (`npm test`). The shift engine has 28 more tests with a fake GPS, a
+fake database and fake timers; other tests keep the service worker list,
+the CSP hashes and the preload lists in sync (`npm run test:unit`, no
+emulator needed).
+
+### Content-Security-Policy and service worker
+
+Firebase Hosting sends a strict CSP with every page (`firebase.json`):
+
+- `default-src 'self'`; no `unsafe-inline`, no `unsafe-eval`. The four small
+  inline scripts (driver redirect, module preload, theme before first paint,
+  admin theme) are allowed by their SHA-256 hash only. `tests/csp.test.mjs`
+  fails when one of them changes.
+- Scripts: this site, the pinned CDNs (Leaflet on unpkg, Firebase SDK on
+  gstatic, jsQR and qrcode-generator on jsDelivr), Google sign-in
+  (`apis.google.com`), and the database hosts (needed only by the
+  long-polling fallback on networks that block WebSockets).
+- Images: this site, CARTO and OpenStreetMap tiles. Frames: the project's
+  sign-in domain, Google accounts, and the database hosts (long polling).
+- The `127.0.0.1` entries let the same headers work with the local
+  emulators (`firebase emulators:start`); they only reach the same computer.
+- `frame-ancestors 'none'`: no other site can frame SNU Caddy.
+
+The policy was tested with the same headers on a local server: the student
+flow (sign-in, live map, idle pause, demo, offline reload), the driver
+flow and the admin flow ran with **no CSP violations**.
+
+The service worker (`sw.js`) uses **network first** for the app files (a
+new version is used at once; the saved copy only offline or after 4 s on a
+weak signal) and **cache first** for the version-pinned CDN files. It never
+touches live data, sign-in, Firebase's `/__/` pages or map tiles.
 
 ## 6. Threat model
 
@@ -193,12 +250,13 @@ fake database and fake timers (`npm run test:unit`, no emulator needed).
 | Guessing setup codes | 120-bit codes, and the code list cannot be read. No short PIN. |
 | Non-SNU people read caddy positions | Rules need a **verified** `@snu.edu.in` email. Look-alike domains (`@snu.edu.in.evil.com`) fail (tested). Non-SNU Google accounts are deleted right after sign-in. |
 | The Firebase web config is "public" | It is public by design. Security is in the rules, not in the config. Optional: restrict the browser API key to the app's domains (setup guide). |
-| A bound phone sends junk or floods writes | Field validation, campus box, accuracy limit, server timestamps, and at most 1 position write per second (GPS fields cannot change without a new timestamp; tested). Status taps are not limited; an abusive phone is revoked. |
+| A bound phone sends junk or floods writes | Field validation, campus box, accuracy limit, server timestamps, and at most 1 position write per second (GPS fields and `movedAt` cannot change without a new timestamp; tested). An abusive phone is revoked. |
 | A setup QR is replaced or left on screen | When the admin makes a new code, signs out or closes the page, the unused code is deleted at once. Unused codes also expire after 10 minutes. |
 | Driver location outside work | The phone shares only between GO and Go offline, and stops at the campus fence + 100 m. The rules also reject positions outside the campus box. |
 | Student location privacy | The geofence check runs **on the phone**. The location is never sent or stored. |
 | Ghost caddies (dead battery, closed app, dead zone) | `onDisconnect()` sets `online: false` on the server (tested). Students also dim any caddy whose `lastUpdated` is older than **90 s** and label it "Signal lost". |
-| Script injection (XSS) | All text goes into the page with `textContent`. Leaflet, jsQR and qrcode-generator are pinned and use Subresource Integrity. The Firebase SDK is pinned to 12.19.0 on Google's gstatic CDN; it loads as ES modules, which cannot carry SRI (self-hosting it is planned with the Phase 4 service worker). Pages cannot be framed (`frame-ancestors 'none'`). A strict Content-Security-Policy follows in Phase 4, after a test against the live project. |
+| Script injection (XSS) | All text goes into the page with `textContent`. A strict Content-Security-Policy allows only this site's scripts, hashed inline scripts and the pinned CDNs (see section 5). Leaflet, jsQR and qrcode-generator are pinned and use Subresource Integrity. The Firebase SDK is pinned to 12.19.0 on Google's gstatic CDN; it loads as ES modules, which cannot carry SRI. Pages cannot be framed (`frame-ancestors 'none'`). |
+| A bad CDN file or a cached old version | The service worker caches only version-pinned CDN URLs, and same-origin files with network first; it never caches live data or sign-in. |
 | Students who graduate or leave | Firebase keeps a session until sign-out, even after the Google Workspace account is disabled. Options for IT: (a) disable or delete old users in Firebase Authentication each semester, or (b) add one rule line that requires a fresh sign-in every N days (`auth.token.auth_time`). The current build keeps students signed in, as requested. |
 | Geofence bypass with developer tools | Accepted: the geofence is a usage policy, not a security boundary. The data is protected by the SNU login. |
 
@@ -208,11 +266,11 @@ fake database and fake timers (`npm run test:unit`, no emulator needed).
 | ----- | ----------- | ------- |
 | Database storage | 1 GB | A few KB (state overwrite, no history) |
 | Database download | 10 GB/month (~360 MB/day) | About 1–2 MB per student per hour of viewing (each moving caddy writes at most once every 2 s; a parked one every 30 s). Sessions are short (open, look, close), and listeners stop when the app is hidden. |
-| Simultaneous DB connections | **100** | Driver phones (one per caddy) + students who have the app **on screen, on campus**. Phase 4 also pauses after a few minutes without interaction. |
+| Simultaneous DB connections | **100** | Driver phones (one per caddy) + students who have the app **on screen, on campus, and touched it in the last 5 minutes**. In every other case the student app closes its connection. |
 | New accounts | 100 per hour per IP address | Campus Wi-Fi shares IP addresses, so plan a staggered launch. The app shows a clear "try again in a few minutes" message. |
 | Email-link sign-in | 5 emails/day | Not used. |
 | Daily active users | 3,000/day **only** if the project is upgraded to "Identity Platform" | Do **not** upgrade. Standard Firebase Auth is enough. |
-| Hosting | 10 GB storage, 360 MB/day transfer | App files are about 200 KB. Leaflet and the Firebase SDK come from public CDNs. |
+| Hosting | 10 GB storage, 360 MB/day transfer | App files are about 200 KB, and the service worker serves repeat visits from the phone. Leaflet and the Firebase SDK come from public CDNs. |
 | CARTO basemap tiles | 5 million requests/month (non-commercial key) | Tiles are cached for 30 days by the browser. |
 
 If SNU grows past 100 viewers at the same moment, the next step is the
@@ -228,8 +286,11 @@ but it needs a billing account. That is a decision for SNU IT.
 | Caddy parked for a long time | One heartbeat every 30 s. If the browser reports no new fix, the phone asks the GPS for one. |
 | Driver drives through a dead zone | No writes are queued. The server sets `online: false` (`onDisconnect`). On reconnect the phone sends only its newest fix and registers `onDisconnect` again (`.info/connected`). |
 | Phone battery dies, app is killed | The server runs `onDisconnect`: `online: false`. |
-| Phone clock is wrong | All times are server time (`ServerValue.TIMESTAMP`); students use the server time offset for the 90 s check. |
+| Phone clock is wrong | All times are server time (`ServerValue.TIMESTAMP`); students use the server time offset for the 90 s and 60 s checks (tested with a phone clock 10 minutes fast). |
 | Student switches app or locks the phone | Page Visibility API: no GPS, no timers, database connection closed. |
+| Student leaves the app open on a desk | After 5 minutes without a touch, live updates pause and the connection closes. A chip says "Live updates paused · Tap to resume". |
+| Student opens the app in a dead zone | The service worker serves the app; the list says "Connecting…" until the database answers. |
+| Network blocks WebSockets | The Firebase SDK falls back to long polling (allowed by the CSP). |
 | Student is off campus | "You're outside campus—live tracking activates on campus grounds." No data is loaded. |
 | Student denies location | A clear card explains why location is needed and that it stays on the phone. No data is loaded. |
 | Site opened over plain `http://` | Location needs HTTPS; the app says so. |
@@ -250,5 +311,5 @@ but it needs a billing account. That is a decision for SNU IT.
 | ----- | ----- | ------ |
 | 1 | Uber-style map, bottom sheet, theme (Auto/Light/Dark), demo/pitch mode | Done |
 | 2 | Firebase project, `@snu.edu.in` login, geofence, QR device binding, admin dashboard, security rules + tests | Done |
-| 3 | Driver screen: GO / Seats open / Full / Go offline, GPS gate, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
-| 4 | Live caddies on the student map, 90 s "Signal lost", connection management, service worker (offline app shell), strict CSP | Next |
+| 3 | Driver screen: GO → Online & broadcasting → Go offline, GPS gate, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
+| 4 | Live caddies on the student map (Moving / Parked / Signal lost / Offline), connection management with idle pause, service worker (offline app shell), strict CSP | Done |

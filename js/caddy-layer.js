@@ -9,13 +9,12 @@
 //  - Turning uses a CSS transition (runs on the GPU, no JS per frame).
 /* global L */
 
+import { STATE_TEXT } from './caddy-state.js';
 import { GLIDE } from './config.js';
 import { bearingDeg, distanceM, lerpLatLng, turnDeg } from './lib/geo.js';
 
 const FRAME_MS = 1000 / GLIDE.fps;
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
-export const STATUS_TEXT = { open: 'Seats open', full: 'Full', offline: 'Offline' };
 
 /** Top-down golf cart, nose pointing up (north) at 0 degrees. */
 export function cartSvg() {
@@ -64,8 +63,8 @@ export class CaddyLayer {
   }
 
   /**
-   * Add a caddy or apply a new ping.
-   * @param {{ id: string, name: string, status: 'open'|'full'|'offline',
+   * Add a caddy, apply a new ping, or show a new state (same ping, later time).
+   * @param {{ id: string, name: string, state: 'moving'|'parked'|'lost'|'offline',
    *           lat: number, lng: number, ts: number, heading?: number|null, speed?: number|null }} c
    */
   update(c) {
@@ -75,15 +74,15 @@ export class CaddyLayer {
     if (!it) {
       it = this.create(c, target);
       this.items.set(c.id, it);
-      this.applyStatus(it, c);
+      this.applyState(it, c);
       return;
     }
 
-    this.applyStatus(it, c);
+    this.applyState(it, c);
 
     // Ignore pings that are older than the one on screen (out-of-order delivery).
     if (c.ts < it.ts) return;
-    // Same place (heartbeat or status-only change): nothing to move.
+    // Same place (heartbeat, or only the state changed): nothing to move.
     if (c.lat === it.to.lat && c.lng === it.to.lng) {
       it.ts = c.ts;
       return;
@@ -177,19 +176,19 @@ export class CaddyLayer {
       start: 0,
       dur: 0,
       ts: c.ts,
-      status: null,
+      state: null,
       name: c.name,
     };
   }
 
-  applyStatus(it, c) {
-    if (it.status === c.status && it.name === c.name) return;
-    it.status = c.status;
+  applyState(it, c) {
+    if (it.state === c.state && it.name === c.name) return;
+    it.state = c.state;
     it.name = c.name;
-    it.el.dataset.status = c.status;
-    it.el.setAttribute('aria-label', `${c.name}, ${STATUS_TEXT[c.status] ?? c.status}`);
-    // Active caddies draw above parked/offline ones.
-    it.marker.setZIndexOffset(c.status === 'offline' ? -1000 : 0);
+    it.el.dataset.state = c.state;
+    it.el.setAttribute('aria-label', `${c.name}, ${STATE_TEXT[c.state] ?? c.state}`);
+    // Caddies a student can catch draw above the others.
+    it.marker.setZIndexOffset({ lost: -500, offline: -1000 }[c.state] ?? 0);
   }
 
   /** Face the direction of travel. Prefer the phone's own heading when it is moving. */

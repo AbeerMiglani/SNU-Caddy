@@ -38,7 +38,6 @@ const pos = (o = {}) => ({
   lng: 77.5745,
   bearing: 90,
   accuracy: 6,
-  status: 'open',
   online: true,
   lastUpdated: serverTimestamp(),
   ...o,
@@ -65,8 +64,8 @@ beforeEach(async () => {
           lat: 28.525,
           lng: 77.575,
           accuracy: 5,
-          status: 'full',
           online: true,
+          movedAt: now - 5000,
           lastUpdated: now - 5000,
         },
       },
@@ -125,7 +124,7 @@ test('anonymous (unbound) phone cannot read caddies', async () => {
 // ---------------------------------------------------------------- writing --
 test('students cannot write any caddy', async () => {
   await assertFails(set(ref(db('stu', student), 'caddies/caddy_01'), pos()));
-  await assertFails(update(ref(db('stu', student), 'caddies/caddy_02'), { status: 'open' }));
+  await assertFails(update(ref(db('stu', student), 'caddies/caddy_02'), { online: false }));
 });
 
 test('unbound anonymous phone cannot write a caddy', async () => {
@@ -189,7 +188,7 @@ test('unknown code is rejected', async () => {
 // ------------------------------------------------------- bound driver writes --
 test('bound driver writes its own caddy, not another', async () => {
   const d = db('drv2', anon);
-  await assertSucceeds(set(ref(d, 'caddies/caddy_02'), pos({ status: 'full' })));
+  await assertSucceeds(set(ref(d, 'caddies/caddy_02'), pos({ bearing: 180 })));
   await assertFails(set(ref(d, 'caddies/caddy_01'), pos()));
 });
 
@@ -203,7 +202,9 @@ test('field validation blocks spoofed or junk data', async () => {
   const d = db('drv2', anon);
   await assertFails(set(ref(d, 'caddies/caddy_02'), pos({ lat: 28.7 }))); // off campus
   await assertFails(set(ref(d, 'caddies/caddy_02'), pos({ lng: 'x' })));
-  await assertFails(set(ref(d, 'caddies/caddy_02'), pos({ status: 'free' })));
+  await assertFails(set(ref(d, 'caddies/caddy_02'), pos({ status: 'open' }))); // seat status is gone
+  await assertFails(set(ref(d, 'caddies/caddy_02'), pos({ online: 'yes' })));
+  await assertFails(set(ref(d, 'caddies/caddy_02'), pos({ movedAt: Date.now() }))); // client clock
   await assertFails(set(ref(d, 'caddies/caddy_02'), pos({ accuracy: 45 }))); // blurry fix
   await assertFails(set(ref(d, 'caddies/caddy_02'), pos({ bearing: 400 })));
   await assertFails(set(ref(d, 'caddies/caddy_02'), pos({ lastUpdated: Date.now() }))); // client clock
@@ -212,13 +213,13 @@ test('field validation blocks spoofed or junk data', async () => {
   await assertFails(remove(ref(d, 'caddies/caddy_02'))); // drivers cannot delete
 });
 
-test('position writes faster than 1 per second are rejected; status taps are not limited', async () => {
+test('position writes faster than 1 per second are rejected; going offline is not limited', async () => {
   const d = db('drv2', anon);
   await assertSucceeds(set(ref(d, 'caddies/caddy_02'), pos()));
   await assertFails(
     update(ref(d, 'caddies/caddy_02'), { lat: 28.5246, lastUpdated: serverTimestamp() }),
   );
-  await assertSucceeds(update(ref(d, 'caddies/caddy_02'), { status: 'full' }));
+  await assertSucceeds(update(ref(d, 'caddies/caddy_02'), { online: false }));
   await sleep(1100);
   await assertSucceeds(
     update(ref(d, 'caddies/caddy_02'), { lat: 28.5246, lastUpdated: serverTimestamp() }),
@@ -320,7 +321,6 @@ const phonePosition = (o = {}) => ({
   lat: 28.5245,
   lng: 77.5745,
   accuracy: 6,
-  status: 'open',
   online: true,
   lastUpdated: serverTimestamp(),
   ...o,
@@ -334,7 +334,6 @@ test('shift: first position creates the node (no bearing yet), then onDisconnect
   await assertFails(onDisconnect(node).update({ online: false }));
   await assertSucceeds(update(node, phonePosition()));
   await assertSucceeds(onDisconnect(node).update({ online: false })); // no wait needed
-  await assertSucceeds(update(node, { status: 'full' })); // seat tap right after a position
   await assertSucceeds(update(node, { online: false })); // outside campus / Go offline
   await assertSucceeds(onDisconnect(node).cancel());
 });
@@ -354,6 +353,23 @@ test('shift: position updates with and without bearing; heartbeat with the same 
   assert.equal(v.lat, 28.52455);
 });
 
+test('movedAt: server time only, and only together with a position write', async () => {
+  const node = ref(db('drv2', anon), 'caddies/caddy_02');
+  // A moving caddy: position + movedAt in one write.
+  await assertSucceeds(update(node, phonePosition({ lat: 28.5246, movedAt: serverTimestamp() })));
+  await sleep(1100);
+  // Heartbeat: movedAt left out, so it keeps its value.
+  await assertSucceeds(update(node, phonePosition({ lat: 28.5246 })));
+  // movedAt alone (no new lastUpdated) would fake movement without the rate limit.
+  await assertFails(update(node, { movedAt: serverTimestamp() }));
+  await assertFails(update(node, { movedAt: 'now' }));
+  let v;
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    v = (await get(ref(ctx.database(), 'caddies/caddy_02'))).val();
+  });
+  assert.ok(v.movedAt < v.lastUpdated, 'the heartbeat did not touch movedAt');
+});
+
 test('onDisconnect flips online:false when the phone drops', async () => {
   const d = db('drv2', anon);
   const node = ref(d, 'caddies/caddy_02');
@@ -366,5 +382,5 @@ test('onDisconnect flips online:false when the phone drops', async () => {
     v = (await get(ref(ctx.database(), 'caddies/caddy_02'))).val();
   });
   assert.equal(v.online, false);
-  assert.equal(v.status, 'open', 'everything else stays');
+  assert.equal(v.accuracy, 6, 'everything else stays');
 });

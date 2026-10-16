@@ -90,6 +90,24 @@ export const DRIVER = {
   resumeWithinMs: 10 * 60_000,
   /** This many refused writes in a row: tell the driver to call an admin. */
   refusedAfter: 3,
+  /** Blurry fixes for this long after the last sharp one: the screen says "GPS is weak". */
+  weakAfterMs: 5000,
+  /** An error radius above this means "approximate location" (precise location is off). */
+  approximateM: 500,
+  /** Moving (for "Moving" / "Parked"): GPS speed at least this (m/s), ... */
+  movingSpeedMs: 1,
+  /** ... or, without speed, this far (and beyond the error radius) from the last move. */
+  movingMinM: 10,
+};
+
+/** Student map: what each caddy's state means. */
+export const LIVE = {
+  /** No new data for this long: "Signal lost" (the caddy is dimmed). */
+  signalLostMs: 90_000,
+  /** No real move for this long: "Parked" instead of "Moving". */
+  parkedAfterMs: 60_000,
+  /** No touch for this long: live updates pause (saves battery, data and DB connections). */
+  idlePauseMs: 5 * 60_000,
 };
 
 /** How caddy icons glide between GPS pings on the student map. */
@@ -115,8 +133,8 @@ export const DEMO = {
   gpsTickMs: 1_000,
   gpsNoiseM: 1.2,
   dwellMs: [8_000, 15_000],
-  /** Chance that a caddy flips between "Seats open" and "Full" at a stop. */
-  flipChance: 0.35,
+  /** One caddy takes a long break at one stop, so the pitch also shows "Parked". */
+  longBreak: { caddy: 'caddy-03', stop: 'D Block', ms: 100_000 },
   /** Chance of a blurry fix (> 20 m), which the accuracy filter must drop. */
   badFixChance: 0.03,
   parkedMinutesAgo: 14,

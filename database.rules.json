@@ -41,7 +41,7 @@
         // ... and only the phone bound to THIS caddy writes it. Admins may
         // force a caddy offline or delete its state.
         ".write": "(auth != null && newData.exists() && root.child('drivers').child(auth.uid).child('caddyId').val() === $caddyId) || (auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i) && root.child('admins').child(auth.uid).val() === true)",
-        ".validate": "root.child('fleet').child($caddyId).exists() && newData.hasChildren(['lat', 'lng', 'accuracy', 'status', 'online', 'lastUpdated'])",
+        ".validate": "root.child('fleet').child($caddyId).exists() && newData.hasChildren(['lat', 'lng', 'accuracy', 'online', 'lastUpdated'])",
         // Positions must be on (or next to) campus. This also protects the
         // driver's privacy: the phone cannot publish a location off campus.
         // A GPS field (lat, lng, bearing, accuracy) may change only together
@@ -50,11 +50,12 @@
         "lng": { ".validate": "newData.isNumber() && newData.val() >= 77.563 && newData.val() <= 77.586 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
         "bearing": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
         "accuracy": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
-        "status": { ".validate": "newData.val() === 'open' || newData.val() === 'full'" },
         "online": { ".validate": "newData.isBoolean()" },
+        // Server time of the caddy's last real move (students see "Moving" or
+        // "Parked"). Optional; it changes only together with a position write.
+        "movedAt": { ".validate": "newData.isNumber() && (newData.val() === data.val() || (newData.val() === now && newData.parent().child('lastUpdated').val() === now))" },
         // Server time only (ServerValue.TIMESTAMP), and at most one position
-        // write per second per caddy. Status taps (open / full) and online
-        // changes are human actions and are not rate-limited.
+        // write per second per caddy. Going online / offline is not rate-limited.
         "lastUpdated": {
           ".validate": "newData.isNumber() && newData.val() === now && (!data.exists() || newData.val() >= data.val() + 1000)"
         },

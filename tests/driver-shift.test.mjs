@@ -66,9 +66,13 @@ function fakeDb() {
     log: [], // every call, in order
     positions: [],
     refuse: false,
-    sendPosition(f) {
+    hold: null, // set to an array to keep position writes pending (a dead socket)
+    moved: [],
+    sendPosition(f, { moved }) {
       d.log.push(['position', f]);
       d.positions.push(f);
+      d.moved.push(moved);
+      if (d.hold) return new Promise((resolve) => d.hold.push(resolve));
       return d.refuse ? Promise.reject(new Error('PERMISSION_DENIED')) : Promise.resolve();
     },
     setFields(f) {
@@ -155,7 +159,7 @@ test('GO: wake lock, high-accuracy GPS watch, first fix sent at once, then onDis
   geo.fix(HOME, 6);
   await flush();
   assert.equal(db.positions.length, 1);
-  assert.deepEqual(db.positions[0], { lat: 28.5245, lng: 77.5745, accuracy: 6, status: 'open' });
+  assert.deepEqual(db.positions[0], { lat: 28.5245, lng: 77.5745, accuracy: 6 });
   // onDisconnect is armed only after the node exists (the rules need that).
   assert.deepEqual(
     db.log.map(([k]) => k),
@@ -163,15 +167,18 @@ test('GO: wake lock, high-accuracy GPS watch, first fix sent at once, then onDis
   );
   assert.equal(last().gps, 'ok');
   assert.notEqual(last().sentAt, null);
-  assert.equal(persist.saved.status, 'open');
+  assert.equal(typeof persist.saved.aliveAt, 'number');
 });
 
 test('blurry fixes (> 20 m) are not sent', async () => {
   const shift = makeShift();
   shift.go();
-  geo.fix(HOME, 35);
+  geo.fix(HOME);
   await flush();
-  assert.equal(db.positions.length, 0);
+  await wait(6000);
+  geo.fix(offsetM(HOME, 30, 0), 35);
+  await flush();
+  assert.equal(db.positions.length, 1);
   assert.equal(last().gps, 'weak');
   assert.equal(last().accuracy, 35);
 });
@@ -331,21 +338,101 @@ test('GO while offline: sharing starts when the phone is online', async () => {
   assert.equal(db.positions.length, 1);
 });
 
-test('Seats open / Full: status write at once, and every position carries it', async () => {
+test('Moving / Parked: movedAt only for real moves (GPS speed, or a clear distance)', async () => {
   const shift = makeShift();
   shift.go();
-  shift.setStatus('full'); // before the first fix: kept locally
-  assert.equal(db.calls('fields').length, 0);
+  geo.fix(HOME, 6, { speed: 0 });
+  await flush();
+  assert.equal(db.moved[0], false, 'parked at the start');
+
+  await wait(2100);
+  geo.fix(offsetM(HOME, 8, 0), 6, { speed: 4 });
+  await flush();
+  assert.equal(db.moved[1], true, 'GPS speed says it drives');
+
+  // Without speed: GPS noise of 6 m around one place is not a move ...
+  await wait(2100);
+  geo.fix(offsetM(HOME, 14, 0), 6);
+  await flush();
+  assert.equal(db.moved[2], false, '6 m from the last move: noise');
+  // ... but 15 m beyond the error radius is.
+  await wait(2100);
+  geo.fix(offsetM(HOME, 30, 0), 6);
+  await flush();
+  assert.equal(db.moved[3], true);
+});
+
+test('Go offline while the first write is still pending: online:false still follows it', async () => {
+  const shift = makeShift();
+  db.hold = [];
+  shift.go();
   geo.fix(HOME);
   await flush();
-  assert.equal(db.positions[0].status, 'full');
+  assert.equal(db.positions.length, 1, 'first write sent, not confirmed (dead socket)');
+  shift.stop('driver');
+  assert.deepEqual(
+    db.log.map(([k, f]) => (k === 'fields' ? f : k)),
+    ['position', { online: false }, 'cancel'],
+  );
+  // The late confirmation of the old shift does not arm onDisconnect.
+  db.hold.forEach((r) => r());
+  await flush();
+  assert.equal(db.calls('arm').length, 0);
+});
 
-  shift.setStatus('open');
-  assert.deepEqual(db.calls('fields').at(-1), ['fields', { status: 'open' }]);
-  assert.equal(last().status, 'open');
-  assert.equal(persist.saved.status, 'open');
-  shift.setStatus('nonsense');
-  assert.equal(last().status, 'open');
+test('outside campus while the first write is pending: online:false still follows it', async () => {
+  const shift = makeShift();
+  db.hold = [];
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  geo.fix(OFF_CAMPUS);
+  assert.deepEqual(db.calls('fields'), [['fields', { online: false }]]);
+});
+
+test('GPS hovering around 20 m: no flicker between "ok" and "weak"', async () => {
+  const shift = makeShift();
+  shift.go();
+  const seen = new Set();
+  for (let i = 0; i < 20; i++) {
+    geo.fix(HOME, i % 2 ? 23 : 18);
+    seen.add(last().gps);
+    await wait(1000, 500);
+  }
+  assert.deepEqual([...seen], ['ok']);
+  for (let i = 0; i < 8; i++) {
+    geo.fix(HOME, 25); // only blurry fixes now
+    await wait(1000, 500);
+  }
+  assert.equal(last().gps, 'weak', 'weak after 5 s of blurry fixes only');
+});
+
+test('blurry fix after leaving campus: still "outside" (a blurry fix proves nothing)', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  geo.fix(OFF_CAMPUS);
+  await wait(6000);
+  geo.fix(OFF_CAMPUS, 40);
+  assert.equal(last().gps, 'outside');
+});
+
+test('approximate location (precise location off): said clearly', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME, 1800);
+  assert.equal(last().gps, 'approximate');
+  assert.equal(db.positions.length, 0);
+});
+
+test('blurry fixes before any sharp one: still "waiting", with the error radius', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME, 45);
+  assert.equal(last().gps, 'waiting');
+  assert.equal(last().accuracy, 45);
+  assert.equal(typeof last().gpsSince, 'number');
 });
 
 test('Go offline: online:false, then onDisconnect cancelled; GPS and wake lock off', async () => {
@@ -453,15 +540,15 @@ test('app in the background for a short time: the shift goes on and asks for a f
   assert.ok(geo.oneShots.length >= 1);
 });
 
-test('resume after a reload keeps the seat status and the shift start', async () => {
+test('resume after a reload keeps the shift start; the GPS search starts now', async () => {
   const shift = makeShift();
   const since = Date.now() - 3_600_000;
-  shift.go({ status: 'full', since });
-  assert.equal(last().status, 'full');
+  shift.go({ since });
   assert.equal(last().since, since);
+  assert.equal(last().gpsSince, Date.now());
   geo.fix(HOME);
   await flush();
-  assert.equal(db.positions[0].status, 'full');
+  assert.equal(db.positions.length, 1);
 });
 
 test('the campus fence plus its margin lies inside the database rules box', () => {
