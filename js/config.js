@@ -70,6 +70,28 @@ export const GPS_RULES = {
   heartbeatMs: 30_000,
 };
 
+/** Driver phone: how the shift engine (js/driver-shift.js) talks to the database. */
+export const DRIVER = {
+  /**
+   * At most one position write per this time. The database allows one per
+   * second; the extra time absorbs network jitter and, at caddy speed, cuts
+   * the data that every student downloads by up to 40%.
+   */
+  minWriteGapMs: 2000,
+  /** After the server confirms a write, wait at least this long (its 1 s limit). */
+  ackGapMs: 1100,
+  /** Only fixes this new are sent. An older fix means: ask the GPS again. */
+  fixFreshMs: 10_000,
+  /** No fix for this long: the screen says "No GPS signal". */
+  gpsLostMs: 20_000,
+  /** How often the engine checks the heartbeat and the GPS. */
+  tickMs: 5000,
+  /** A shift paused for longer than this (app closed or in the background) ends by itself. */
+  resumeWithinMs: 10 * 60_000,
+  /** This many refused writes in a row: tell the driver to call an admin. */
+  refusedAfter: 3,
+};
+
 /** How caddy icons glide between GPS pings on the student map. */
 export const GLIDE = {
   /** Frame cap for the glide loop. Caddies move slowly, so 30 fps looks smooth. */

@@ -1,5 +1,5 @@
 /* Driver screen: OLED pitch black. Pure #000 background so OLED pixels stay off;
-   only small, dim text and one big control are lit. No map, no animation. */
+   only dim text, thin rings and the active control are lit. No map, no animation. */
 
 @font-face {
   font-family: 'Inter Variable';
@@ -15,7 +15,12 @@
   --black: #000000;
   --dim: #8a8a8a; /* 6.0:1 on black: readable, but not bright */
   --soft: #d9d9d9;
+  --line: #262626;
   --go: #06c167;
+  --go-bg: rgba(6, 193, 103, 0.13);
+  --full: #ff5a4f;
+  --full-bg: rgba(255, 90, 79, 0.13);
+  --warn: #f5b544;
   --danger: #ff5a4f;
   color-scheme: dark;
 }
@@ -30,6 +35,7 @@ html,
 body {
   height: 100%;
   margin: 0;
+  overflow: hidden;
   background: var(--black);
   color: var(--soft);
   font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
@@ -40,6 +46,16 @@ body {
 
 button {
   font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 :focus-visible {
@@ -47,12 +63,32 @@ button {
   outline-offset: 3px;
 }
 
+/* --- Layout ---------------------------------------------------------------- */
 .driver {
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  min-height: 100%;
-  padding: calc(env(safe-area-inset-top, 0px) + 16px) 24px
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-areas: 'top' 'center' 'seats' 'bottom';
+  gap: 20px;
+  height: 100%;
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 20px
     calc(env(safe-area-inset-bottom, 0px) + 24px);
+  /* OLED care: driver-screen.js moves everything by a few pixels every minute. */
+  translate: var(--nudge-x, 0) var(--nudge-y, 0);
+  transition: opacity 0.8s;
+}
+
+/* Nobody touched the screen for a while: dim it (a tap brings it back). */
+.driver.is-dim {
+  opacity: 0.5;
+}
+
+.driver__top {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
 }
 
 .driver__app {
@@ -63,7 +99,37 @@ button {
   user-select: none;
 }
 
+.driver__net {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.driver__net::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+
+.driver__net[data-state='ok']::before {
+  background: var(--go);
+}
+
+.driver__net[data-state='bad'] {
+  color: var(--danger);
+}
+
+.driver__net[data-state='bad']::before {
+  background: var(--danger);
+}
+
 .driver__center {
+  grid-area: center;
   align-self: center;
   text-align: center;
 }
@@ -72,6 +138,7 @@ button {
   margin: 0;
   color: var(--dim);
   font-size: 15px;
+  font-weight: 500;
 }
 
 .driver__name {
@@ -80,34 +147,177 @@ button {
   font-size: 44px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .driver__status {
   margin: 0 auto;
-  max-width: 30ch;
+  max-width: 32ch;
   color: var(--dim);
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 500;
   line-height: 1.45;
 }
 
-.driver__status[data-state='error'] {
+.driver__status[data-tone='ok'] {
+  color: var(--go);
+}
+
+.driver__status[data-tone='warn'] {
+  color: var(--warn);
+}
+
+.driver__status[data-tone='error'] {
   color: var(--danger);
 }
 
+.driver__meta {
+  min-height: 1.4em;
+  margin: 8px auto 0;
+  max-width: 36ch;
+  color: var(--dim);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- GO (off shift) -------------------------------------------------------- */
 .driver__bottom {
+  grid-area: bottom;
   display: grid;
   place-items: center;
 }
 
-/* The giant Uber-style GO button (active in Phase 3). */
 .driver__go {
   width: min(64vw, 240px);
   aspect-ratio: 1;
-  border: 3px solid #1f1f1f;
+  border: 4px solid var(--go);
   border-radius: 50%;
   background: var(--black);
-  color: #3a3a3a;
-  font-size: 40px;
+  box-shadow:
+    0 0 0 10px var(--black),
+    0 0 0 12px rgba(6, 193, 103, 0.35);
+  color: var(--go);
+  font-size: 52px;
   font-weight: 800;
   letter-spacing: 0.04em;
+}
+
+.driver__go:active {
+  background: var(--go-bg);
+}
+
+.driver__go:disabled {
+  border-color: #1f1f1f;
+  box-shadow: none;
+  color: #3a3a3a;
+}
+
+/* --- On shift: seats and Go offline ---------------------------------------- */
+.driver[data-mode='on'] .driver__name {
+  margin: 4px 0 10px;
+  font-size: 34px;
+}
+
+.driver__seats {
+  grid-area: seats;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: clamp(120px, 24vh, 190px);
+  border: 2px solid var(--line);
+  border-radius: 24px;
+  background: var(--black);
+  color: var(--dim);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.seat__dot {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.seat[aria-pressed='true'] .seat__dot {
+  background: currentColor;
+}
+
+.seat--open[aria-pressed='true'] {
+  border-color: var(--go);
+  background: var(--go-bg);
+  color: var(--go);
+}
+
+.seat--full[aria-pressed='true'] {
+  border-color: var(--full);
+  background: var(--full-bg);
+  color: var(--full);
+}
+
+.driver__off {
+  width: 100%;
+  height: 60px;
+  border: 2px solid #4a2523;
+  border-radius: 999px;
+  background: var(--black);
+  color: #ff8a80;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.driver__off[data-confirm='true'] {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--black);
+}
+
+/* --- Phone on its side (dashboard mount) ------------------------------------- */
+@media (orientation: landscape) and (max-height: 560px) {
+  .driver {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas: 'top top' 'center seats' 'center bottom';
+    column-gap: 28px;
+    row-gap: 14px;
+    padding-left: calc(env(safe-area-inset-left, 0px) + 20px);
+    padding-right: calc(env(safe-area-inset-right, 0px) + 20px);
+  }
+
+  .driver:not([data-mode='on']) .driver__bottom {
+    grid-row: 2 / 4;
+  }
+
+  .driver__go {
+    width: min(56vh, 220px);
+  }
+
+  .driver__name {
+    font-size: 36px;
+  }
+
+  /* The seat buttons fill the right column, above Go offline. */
+  .seat {
+    height: auto;
+    min-height: 96px;
+  }
+
+  .driver__off {
+    height: 52px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .driver {
+    transition: none;
+  }
 }

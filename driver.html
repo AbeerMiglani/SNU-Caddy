@@ -25,46 +25,53 @@
       crossorigin
     />
     <link rel="stylesheet" href="css/driver.css" />
+    <!-- Keep in sync with the imports of js/driver-screen.js (tests/modulepreload.test.mjs). -->
+    <link rel="modulepreload" href="js/driver-screen.js" />
+    <link rel="modulepreload" href="js/config.js" />
+    <link rel="modulepreload" href="js/data/campus.js" />
+    <link rel="modulepreload" href="js/driver.js" />
+    <link rel="modulepreload" href="js/driver-shift.js" />
+    <link rel="modulepreload" href="js/firebase.js" />
+    <link rel="modulepreload" href="js/firebase-config.js" />
+    <link rel="modulepreload" href="js/lib/geo.js" />
+    <link rel="modulepreload" href="js/lib/ping-gate.js" />
+    <link rel="modulepreload" href="js/lib/polygon.js" />
+    <link rel="modulepreload" href="js/lib/wake-lock.js" />
   </head>
   <body>
-    <!-- OLED driver screen: pure black, no map, minimal dim text. -->
-    <main class="driver">
+    <!-- OLED driver screen: pure black, no map, little lit text, big controls. -->
+    <main class="driver" id="driver" data-mode="boot" data-seat="open">
       <header class="driver__top">
         <span class="driver__app">SNU Caddy · Driver</span>
+        <span class="driver__net" id="driver-net" data-state="wait">Connecting…</span>
       </header>
 
       <section class="driver__center">
-        <p class="driver__label">This phone drives</p>
+        <p class="driver__label" id="driver-label">This phone drives</p>
         <h1 class="driver__name" id="driver-name">…</h1>
-        <p class="driver__status" id="driver-status" role="status" data-state="checking">
+        <p class="driver__status" id="driver-status" role="status" data-tone="dim">
           Checking link…
         </p>
+        <p class="driver__meta" id="driver-meta"></p>
+      </section>
+
+      <section class="driver__seats" id="driver-seats" aria-label="Seats" hidden>
+        <button class="seat seat--open" id="seat-open" type="button" aria-pressed="true">
+          <span class="seat__dot" aria-hidden="true"></span>Seats open
+        </button>
+        <button class="seat seat--full" id="seat-full" type="button" aria-pressed="false">
+          <span class="seat__dot" aria-hidden="true"></span>Full
+        </button>
       </section>
 
       <footer class="driver__bottom">
-        <button class="driver__go" type="button" disabled aria-describedby="driver-status">
-          GO
+        <button class="driver__go" id="driver-go" type="button" disabled>GO</button>
+        <button class="driver__off" id="driver-off" type="button" data-confirm="false" hidden>
+          Go offline
         </button>
       </footer>
     </main>
 
-    <script type="module">
-      import { clearBinding, readBinding, verifyLink } from './js/driver.js';
-
-      const binding = readBinding();
-      if (!binding) {
-        clearBinding(); // A broken binding would bounce between the two pages forever.
-        location.replace('./' + location.search);
-      } else {
-        verifyLink(
-          binding,
-          {
-            name: document.getElementById('driver-name'),
-            status: document.getElementById('driver-status'),
-          },
-          () => location.replace('./' + location.search),
-        );
-      }
-    </script>
+    <script type="module" src="js/driver-screen.js"></script>
   </body>
 </html>

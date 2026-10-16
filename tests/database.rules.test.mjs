@@ -1,6 +1,7 @@
 // Security rules tests for SNU Caddy. Run: npm test (starts the Database Emulator).
 // Each test is one attack or one allowed action from docs/ARCHITECTURE.md.
 import { test, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   initializeTestEnvironment,
@@ -313,25 +314,57 @@ test('students cannot make themselves admin', async () => {
   await assertFails(set(ref(db('stu', student), 'admins/stu'), true));
 });
 
-// ----------------------------------------------------------- onDisconnect --
+// ------------------------------------------- the driver phone's real calls --
+// js/driver-screen.js caddyStore(): the exact writes a phone makes in a shift.
+const phonePosition = (o = {}) => ({
+  lat: 28.5245,
+  lng: 77.5745,
+  accuracy: 6,
+  status: 'open',
+  online: true,
+  lastUpdated: serverTimestamp(),
+  ...o,
+});
+
+test('shift: first position creates the node (no bearing yet), then onDisconnect at once', async () => {
+  const d = db('anon1', anon);
+  await assertSucceeds(enroll(d, 'anon1', CODE));
+  const node = ref(d, 'caddies/caddy_01');
+  // Before the node exists, onDisconnect's online:false alone would be an incomplete caddy.
+  await assertFails(onDisconnect(node).update({ online: false }));
+  await assertSucceeds(update(node, phonePosition()));
+  await assertSucceeds(onDisconnect(node).update({ online: false })); // no wait needed
+  await assertSucceeds(update(node, { status: 'full' })); // seat tap right after a position
+  await assertSucceeds(update(node, { online: false })); // outside campus / Go offline
+  await assertSucceeds(onDisconnect(node).cancel());
+});
+
+test('shift: position updates with and without bearing; heartbeat with the same place', async () => {
+  const node = ref(db('drv2', anon), 'caddies/caddy_02');
+  await assertSucceeds(update(node, phonePosition({ bearing: 90 })));
+  await sleep(1100);
+  await assertSucceeds(update(node, phonePosition({ lat: 28.52455 }))); // keeps the old bearing
+  await sleep(1100);
+  await assertSucceeds(update(node, phonePosition({ lat: 28.52455 }))); // heartbeat
+  let v;
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    v = (await get(ref(ctx.database(), 'caddies/caddy_02'))).val();
+  });
+  assert.equal(v.bearing, 90);
+  assert.equal(v.lat, 28.52455);
+});
+
 test('onDisconnect flips online:false when the phone drops', async () => {
   const d = db('drv2', anon);
-  await assertSucceeds(set(ref(d, 'caddies/caddy_02'), pos()));
-  await sleep(1100);
-  await assertSucceeds(
-    onDisconnect(ref(d, 'caddies/caddy_02')).update({
-      online: false,
-      lastUpdated: serverTimestamp(),
-    }),
-  );
+  const node = ref(d, 'caddies/caddy_02');
+  await assertSucceeds(update(node, phonePosition()));
+  await assertSucceeds(onDisconnect(node).update({ online: false }));
   goOffline(d);
   await sleep(1500);
-  let snap;
+  let v;
   await env.withSecurityRulesDisabled(async (ctx) => {
-    snap = await get(ref(ctx.database(), 'caddies/caddy_02'));
+    v = (await get(ref(ctx.database(), 'caddies/caddy_02'))).val();
   });
-  const v = snap.val();
-  if (v.online !== false) throw new Error('online is still ' + v.online);
-  if (!(Date.now() - v.lastUpdated < 5000))
-    throw new Error('lastUpdated not refreshed: ' + v.lastUpdated);
+  assert.equal(v.online, false);
+  assert.equal(v.status, 'open', 'everything else stays');
 });

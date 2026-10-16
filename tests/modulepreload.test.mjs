@@ -1,5 +1,5 @@
-// index.html preloads the app modules in parallel. This test fails when the
-// list there no longer matches the real static imports of js/main.js.
+// index.html and driver.html preload their modules in parallel. These tests fail
+// when a list no longer matches the real static imports of its entry module.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -29,5 +29,12 @@ test('modulepreload list in index.html matches the imports of js/main.js', () =>
     .split(/\s+/)
     .map((m) => `js/${m}.js`);
   const actual = [...staticImports('js/main.js')];
+  assert.deepEqual([...list].sort(), [...actual].sort());
+});
+
+test('modulepreload links in driver.html match the imports of js/driver-screen.js', () => {
+  const html = read('driver.html');
+  const list = [...html.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)].map((m) => m[1]);
+  const actual = [...staticImports('js/driver-screen.js')];
   assert.deepEqual([...list].sort(), [...actual].sort());
 });

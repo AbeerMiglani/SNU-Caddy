@@ -7,8 +7,8 @@ It is a mobile web app (PWA): plain HTML, CSS and JavaScript, with no build step
 | ----- | ---- | ------ |
 | 1 | Full-screen campus map, bottom sheet, theme pill (Auto / Light / Dark), demo / pitch mode | Done |
 | 2 | Firebase project, `@snu.edu.in` Google login, campus geofence, QR driver-phone binding, admin dashboard, security rules + tests | Done |
-| 3 | OLED-black driver screen: GO, Seats open / Full, GPS throttling, Screen Wake Lock, `onDisconnect` | Next |
-| 4 | Live caddies on the student map, 90 s "Signal lost", service worker | Planned |
+| 3 | OLED-black driver screen: GO, Seats open / Full, GPS throttling, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
+| 4 | Live caddies on the student map, 90 s "Signal lost", service worker | Next |
 
 - **For the SNU IT department:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
   (system design, security rules, threat model, free-tier budget, edge cases).
@@ -49,7 +49,8 @@ The automated tests start their own emulator, so stop `npm run emulators`
 (Ctrl-C) first:
 
 ```bash
-npm test                   # 29 security-rule tests + 1 page check
+npm test                   # 31 security-rule tests + 22 driver-shift tests + 2 page checks
+npm run test:unit          # only the driver-shift and page tests (no Java needed)
 ```
 
 ### Open it on your phone
@@ -70,6 +71,21 @@ local IP address (for example `192.168.1.20`) and open
 
 To link a driver phone: on the phone, tap the SNU Caddy logo **5 times
 quickly**, then scan the setup QR from the admin page.
+
+## Driver screen (daily use)
+
+A linked phone opens straight into the black driver screen. No login.
+
+1. Tap **GO**. The phone keeps its screen on and starts to share its
+   location. The first time, Chrome asks for location: tap **Allow**.
+2. Tap **Seats open** or **Full** when it changes. Students see it at once.
+3. At the end of the shift, tap **Go offline** twice.
+
+What the phone sends: a position when the caddy moved 5 m, or every 30 s
+when it is parked. Blurry fixes (> 20 m) and positions outside campus are
+never sent. At most one write every 2 s. If the network drops, the phone
+waits and sends its newest position as soon as it is back. If the app is
+closed, the server marks the caddy offline by itself (`onDisconnect`).
 
 ## Map tiles (CARTO key)
 
@@ -102,7 +118,7 @@ SNU roads, and a fourth caddy is parked and offline:
 
 Each virtual caddy acts like a real driver phone. It makes one GPS fix per
 second with a small error, and sometimes a blurry fix (> 20 m). The same
-rules that the driver screen will use (Phase 3) decide what is sent:
+rules as the real driver screen decide what is sent:
 
 - Fixes with an error radius above 20 m are dropped.
 - A fix is sent only if the caddy moved 5 m, or 30 s passed (heartbeat).
@@ -123,6 +139,7 @@ The demo is repeatable: it uses a fixed random seed, so every pitch looks the sa
 - **Geofence**: one quick, low-accuracy location check when the app opens, then one
   every 5 minutes while it stays on screen. No continuous GPS on student phones.
 - **Driver phones** open `driver.html`: no map, no tiles, no Leaflet, pure black.
+  The screen dims after 20 s without a touch. GPS runs only between GO and Go offline.
 - **No endless animations**: the selected caddy pulses twice, then stays still.
 - **Dark mode** uses pure black (`#000000`) surfaces, so OLED pixels switch off.
 
@@ -149,7 +166,9 @@ js/
   geofence.js           one-shot, low-power campus check
   enroll.js             setup codes, QR scanner, atomic enrollment
   enroll-ui.js          hidden 5-tap setup dialog
-  driver.js             driver binding + live revoke check
+  driver.js             driver binding (stored on the phone)
+  driver-screen.js      driver screen: GO, seats, Go offline, live revoke check
+  driver-shift.js       shift engine: GPS filter, rate limit, onDisconnect, recovery
   admin.js              admin dashboard
   map.js                Leaflet map, campus lock, tile cross-fade
   caddy-layer.js        caddy icons: glide + rotate
@@ -159,11 +178,13 @@ js/
   demo.js               demo simulator
   lib/geo.js            distance, bearing, small helpers
   lib/polygon.js        point-in-polygon, distance to the fence
-  lib/ping-gate.js      5 m / 30 s / 20 m rules (shared with Phase 3)
+  lib/ping-gate.js      5 m / 30 s / 20 m rules (demo and driver phones)
+  lib/wake-lock.js      Screen Wake Lock, taken again after the app was hidden
   data/campus.js        GENERATED: fence polygon, landmarks
   data/demo-routes.js   GENERATED: demo routes on real roads
-tests/database.rules.test.mjs   29 security-rule tests (npm test)
-tests/modulepreload.test.mjs    keeps the preload list in index.html in sync
+tests/database.rules.test.mjs   31 security-rule tests (npm test)
+tests/driver-shift.test.mjs     22 shift-engine tests: fake GPS, database, timers
+tests/modulepreload.test.mjs    keeps the preload lists in index.html and driver.html in sync
 tools/build_campus_data.py      makes the two data files from OpenStreetMap
 docs/                   architecture + Firebase setup guide
 assets/                 icons, Inter font

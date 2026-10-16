@@ -73,7 +73,7 @@ need a Java 21+ JDK (the test runs the Firebase Database Emulator).
 npm install                 # installs the Firebase CLI and the test tools
 npx firebase login          # opens a browser window to sign in
 npx firebase use --add      # pick your project, alias: default
-npm test                    # 29 security-rule tests in a local emulator
+npm test                    # security-rule and driver tests in a local emulator
 npm run deploy              # uploads database.rules.json and the website
 ```
 
@@ -121,6 +121,9 @@ On the admin page, under **Caddies**, add each caddy: number `1`, name
    scan the QR with the phone's normal camera app; it opens the link.)
 5. The phone shows the black driver screen with the caddy name. Done. The
    driver never logs in.
+6. Test it once: tap **GO** and allow location. Within a few seconds the
+   caddy appears as online under **Realtime Database → Data → caddies**.
+   Tap **Go offline** twice when done.
 
 To unlink a phone (lost, replaced): admin page → **Linked phones** →
 **Revoke**.

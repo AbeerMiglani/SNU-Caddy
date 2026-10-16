@@ -1,13 +1,8 @@
-// Driver phone: the OLED-black driver screen.
-//
-// Phase 2: check that this phone is still linked, and react at once when an
-// admin revokes it. Phase 3 adds GO / Seats open / Full / Go offline, GPS
-// throttling, Screen Wake Lock and onDisconnect.
-
-import { FIREBASE_ON, loadFirebase } from './firebase.js';
+// The driver-phone binding stored on the phone (written by the 5-tap setup).
+// The driver screen itself is js/driver-screen.js.
 
 const KEY = 'snucaddy.driver';
-const CADDY_ID_RE = /^caddy_\d{2}$/;
+export const CADDY_ID_RE = /^caddy_\d{2}$/;
 
 /**
  * The local hint that this phone is a driver phone. It only decides which
@@ -33,86 +28,4 @@ export function clearBinding() {
   } catch {
     /* nothing to clear */
   }
-}
-
-/**
- * @param {{ name: HTMLElement, status: HTMLElement }} els
- * @param {() => void} onUnlinked  called after the phone lost its link
- */
-export async function verifyLink(binding, els, onUnlinked) {
-  els.name.textContent = binding.name || binding.caddyId;
-  els.status.textContent = 'Checking link…';
-  els.status.dataset.state = 'checking';
-
-  // Ask again on every start: Chrome grants persistent storage once the app is
-  // installed, so a phone installed after linking is protected from then on.
-  navigator.storage
-    ?.persisted?.()
-    .then((yes) => yes || navigator.storage.persist())
-    .catch(() => {});
-
-  let stopListening = null;
-  let unlinked = false;
-  const unlink = async (fb, message) => {
-    if (unlinked) return;
-    unlinked = true;
-    // Stop the listener first: signing out would cancel it with an error.
-    stopListening?.();
-    clearBinding();
-    els.status.textContent = message;
-    els.status.dataset.state = 'error';
-    await fb?.A.signOut(fb.auth).catch(() => {});
-    setTimeout(onUnlinked, 2500);
-  };
-
-  let fb;
-  try {
-    fb = await loadFirebase();
-  } catch {
-    // No network on boot: stay a driver phone. A failed SDK download can only be
-    // retried by a reload, so reload by itself when the network comes back.
-    els.status.textContent = FIREBASE_ON
-      ? 'No connection. This phone stays linked.'
-      : 'Firebase is not set up yet (docs/FIREBASE_SETUP.md).';
-    els.status.dataset.state = 'offline';
-    if (FIREBASE_ON) window.addEventListener('online', () => location.reload(), { once: true });
-    return;
-  }
-
-  await fb.auth.authStateReady(); // The saved session is restored from IndexedDB (works offline).
-  const user = fb.auth.currentUser;
-  if (!user || !user.isAnonymous || user.uid !== binding.uid) {
-    await unlink(fb, 'This phone is no longer linked. Ask an admin for a new setup code.');
-    return;
-  }
-
-  // Live: an admin's "Revoke" reaches this phone within a second. While the
-  // phone is offline, nothing fires and the phone simply stays linked.
-  stopListening = fb.D.onValue(
-    fb.D.ref(fb.db, `drivers/${user.uid}`),
-    async (snap) => {
-      if (!snap.exists()) {
-        await unlink(fb, 'An admin unlinked this phone.');
-        return;
-      }
-      const { caddyId } = snap.val();
-      if (!CADDY_ID_RE.test(caddyId)) {
-        await unlink(fb, 'This phone is no longer linked. Ask an admin for a new setup code.');
-        return;
-      }
-      const name = await fb.D.get(fb.D.ref(fb.db, `fleet/${caddyId}/name`))
-        .then((s) => s.val() ?? caddyId)
-        .catch(() => binding.name || caddyId);
-      if (unlinked) return;
-      if (caddyId !== binding.caddyId || name !== binding.name) {
-        saveBinding({ ...binding, caddyId, name });
-      }
-      els.name.textContent = name;
-      els.status.textContent = 'Linked. Driver controls arrive in Phase 3.';
-      els.status.dataset.state = 'ok';
-    },
-    // A cancelled listener means the permission is gone (for example, the
-    // phone's account was deleted). Firebase does not retry it.
-    () => unlink(fb, 'This phone is no longer linked. Ask an admin for a new setup code.'),
-  );
 }
