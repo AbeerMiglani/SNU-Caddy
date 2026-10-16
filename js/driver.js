@@ -4,7 +4,7 @@
 // admin revokes it. Phase 3 adds GO / Seats open / Full / Go offline, GPS
 // throttling, Screen Wake Lock and onDisconnect.
 
-import { loadFirebase } from './firebase.js';
+import { FIREBASE_ON, loadFirebase } from './firebase.js';
 
 const KEY = 'snucaddy.driver';
 const CADDY_ID_RE = /^caddy_\d{2}$/;
@@ -44,7 +44,13 @@ export async function verifyLink(binding, els, onUnlinked) {
   els.status.textContent = 'Checking link…';
   els.status.dataset.state = 'checking';
 
+  let stopListening = null;
+  let unlinked = false;
   const unlink = async (fb, message) => {
+    if (unlinked) return;
+    unlinked = true;
+    // Stop the listener first: signing out would cancel it with an error.
+    stopListening?.();
     clearBinding();
     els.status.textContent = message;
     els.status.dataset.state = 'error';
@@ -57,7 +63,9 @@ export async function verifyLink(binding, els, onUnlinked) {
     fb = await loadFirebase();
   } catch {
     // No network on boot: stay a driver phone; Phase 3 retries in its loop.
-    els.status.textContent = 'No connection. This phone stays linked.';
+    els.status.textContent = FIREBASE_ON
+      ? 'No connection. This phone stays linked.'
+      : 'Firebase is not set up yet (docs/FIREBASE_SETUP.md).';
     els.status.dataset.state = 'offline';
     return;
   }
@@ -69,8 +77,9 @@ export async function verifyLink(binding, els, onUnlinked) {
     return;
   }
 
-  // Live: an admin's "Revoke" reaches this phone within a second.
-  fb.D.onValue(
+  // Live: an admin's "Revoke" reaches this phone within a second. While the
+  // phone is offline, nothing fires and the phone simply stays linked.
+  stopListening = fb.D.onValue(
     fb.D.ref(fb.db, `drivers/${user.uid}`),
     async (snap) => {
       if (!snap.exists()) {
@@ -78,7 +87,10 @@ export async function verifyLink(binding, els, onUnlinked) {
         return;
       }
       const { caddyId } = snap.val();
-      const name = (await fb.D.get(fb.D.ref(fb.db, `fleet/${caddyId}/name`))).val() ?? caddyId;
+      const name = await fb.D.get(fb.D.ref(fb.db, `fleet/${caddyId}/name`))
+        .then((s) => s.val() ?? caddyId)
+        .catch(() => binding.name || caddyId);
+      if (unlinked) return;
       if (caddyId !== binding.caddyId || name !== binding.name) {
         saveBinding({ ...binding, caddyId, name });
       }
@@ -86,9 +98,8 @@ export async function verifyLink(binding, els, onUnlinked) {
       els.status.textContent = 'Linked. Driver controls arrive in Phase 3.';
       els.status.dataset.state = 'ok';
     },
-    () => {
-      els.status.textContent = 'Could not check the link. Retrying when online.';
-      els.status.dataset.state = 'offline';
-    },
+    // A cancelled listener means the permission is gone (for example, the
+    // phone's account was deleted). Firebase does not retry it.
+    () => unlink(fb, 'This phone is no longer linked. Ask an admin for a new setup code.'),
   );
 }

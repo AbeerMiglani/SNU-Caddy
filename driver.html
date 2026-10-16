@@ -12,9 +12,9 @@
     <script>
       // Not a linked phone? Go to the student app.
       try {
-        if (!localStorage.getItem('snucaddy.driver')) location.replace('./');
+        if (!localStorage.getItem('snucaddy.driver')) location.replace('./' + location.search);
       } catch (e) {
-        location.replace('./');
+        location.replace('./' + location.search);
       }
     </script>
     <link
@@ -53,7 +53,7 @@
 
       const binding = readBinding();
       if (!binding) {
-        location.replace('./');
+        location.replace('./' + location.search);
       } else {
         verifyLink(
           binding,
@@ -61,7 +61,7 @@
             name: document.getElementById('driver-name'),
             status: document.getElementById('driver-status'),
           },
-          () => location.replace('./'),
+          () => location.replace('./' + location.search),
         );
       }
     </script>

@@ -43,13 +43,14 @@ function getPosition(options) {
 }
 
 /** @returns {Promise<FenceResult>} */
-export async function checkCampus({ highAccuracy = false } = {}) {
+export async function checkCampus({ highAccuracy = false, fresh = false } = {}) {
   if (!window.isSecureContext) return { kind: 'insecure' };
   if (!('geolocation' in navigator)) return { kind: 'unsupported' };
   try {
     const pos = await getPosition({
       enableHighAccuracy: highAccuracy,
-      maximumAge: highAccuracy ? 0 : GEOFENCE.maxAgeMs,
+      // A tap ("Check again") must not reuse a fix from before the student moved.
+      maximumAge: highAccuracy || fresh ? 0 : GEOFENCE.maxAgeMs,
       timeout: GEOFENCE.timeoutMs,
     });
     const { latitude, longitude, accuracy } = pos.coords;

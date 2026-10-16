@@ -78,7 +78,9 @@ function ahead(r, s, target) {
 }
 
 class VirtualCaddy {
-  constructor(route, startFraction, status, rand) {
+  /** @param {(c: VirtualCaddy) => boolean} canFlip  false if this caddy holds the last open/full state */
+  constructor(route, startFraction, status, rand, canFlip) {
+    this.canFlip = canFlip;
     this.id = route.id;
     this.name = route.name;
     this.line = route.line;
@@ -141,7 +143,8 @@ class VirtualCaddy {
       this.v = 0;
       const [min, max] = DEMO.dwellMs;
       this.dwellLeft = min + this.rand() * (max - min);
-      if (this.rand() < DEMO.flipChance) {
+      // rand() is always called, so the seeded sequence stays the same.
+      if (this.rand() < DEMO.flipChance && this.canFlip(this)) {
         this.status = this.status === 'open' ? 'full' : 'open';
         changed = true;
       }
@@ -202,9 +205,18 @@ export class DemoSimulator {
     const rand = mulberry32(DEMO.seed);
     const starts = [0.12, 0.55, 0.3];
     const statuses = ['open', 'full', 'open'];
+    // The pitch must always show both "Seats open" and "Full": a caddy may flip
+    // only if another moving caddy still has its current status.
+    const canFlip = (c) => this.caddies.some((o) => o !== c && o.status === c.status);
     this.caddies = DEMO_ROUTES.map(
       (route, i) =>
-        new VirtualCaddy(route, starts[i % starts.length], statuses[i % statuses.length], rand),
+        new VirtualCaddy(
+          route,
+          starts[i % starts.length],
+          statuses[i % statuses.length],
+          rand,
+          canFlip,
+        ),
     );
 
     const now = Date.now();
@@ -220,7 +232,9 @@ export class DemoSimulator {
       ts: now - DEMO.parkedMinutesAgo * 60_000,
     });
     for (const c of this.caddies) this.emitFix(c, now);
-    this.resume();
+    // Started in a background tab (e.g. a ?demo=1 link)? The visibility
+    // handler starts the clock when the page is shown.
+    if (!document.hidden) this.resume();
   }
 
   stop() {
@@ -248,7 +262,9 @@ export class DemoSimulator {
     const now = Date.now();
     for (const c of this.caddies) {
       let statusChanged = false;
-      for (let i = 0; i < SUBSTEPS; i++) statusChanged = c.step(dt / SUBSTEPS) || statusChanged;
+      // Keep each physics step at 0.25 s or less, so corners slow down at any speed.
+      const steps = Math.ceil(SUBSTEPS * this.speed);
+      for (let i = 0; i < steps; i++) statusChanged = c.step(dt / steps) || statusChanged;
       // A status tap (Seats open / Full) is sent at once with the last sent position.
       if (statusChanged && c.lastSent) this.onUpdate(c.record(c.lastSent));
       this.emitFix(c, now);

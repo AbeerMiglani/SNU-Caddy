@@ -147,7 +147,7 @@ export function createStudentGate(els, { onLive, onChange }) {
     checking = true;
     if (!fence || fence.kind !== 'inside') fence = { kind: 'checking' };
     render();
-    const result = await checkCampus();
+    const result = await checkCampus({ fresh: userAction });
     checking = false;
     if (result.kind === 'inside' || result.kind === 'outside') remember(ASKED_KEY);
     fence = result;

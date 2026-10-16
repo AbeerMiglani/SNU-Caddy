@@ -50,6 +50,8 @@
   --sheet-visible: 0px; /* set by sheet.js */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 
   color-scheme: light;
 }
@@ -191,7 +193,8 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  padding: calc(var(--safe-top) + 12px) 12px 0;
+  padding: calc(var(--safe-top) + 12px) calc(var(--safe-right) + 12px) 0
+    calc(var(--safe-left) + 12px);
   pointer-events: none;
 }
 
@@ -406,6 +409,13 @@ button {
   padding: 0 8px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* Below full, a swipe on the list moves the sheet (like Uber / Google Maps);
+   at full, the list scrolls. */
+.sheet:not(.is-full) .sheet__body {
+  overflow-y: hidden;
+  touch-action: none;
 }
 
 /* Demo switch */
@@ -1046,14 +1056,16 @@ button {
     height: 40px;
   }
 
-  .row__line {
-    display: none;
-  }
-
   .pill {
     height: 26px;
     padding: 0 8px;
     font-size: 11px;
+  }
+}
+
+@media (max-width: 359px) {
+  .row__line {
+    display: none;
   }
 }
 
@@ -1063,8 +1075,8 @@ button {
   .sheet {
     top: calc(var(--safe-top) + 68px);
     right: auto;
-    bottom: 12px;
-    left: 12px;
+    bottom: calc(12px + var(--safe-bottom));
+    left: calc(12px + var(--safe-left));
     width: 380px;
     max-width: none;
     margin: 0;
@@ -1081,12 +1093,19 @@ button {
     touch-action: auto;
   }
 
-  .sheet__body {
+  .sheet__body,
+  .sheet:not(.is-full) .sheet__body {
     max-height: none !important;
+    overflow-y: auto;
+    touch-action: auto;
   }
 
   .leaflet-bottom {
-    bottom: 0;
+    bottom: var(--safe-bottom);
+  }
+
+  .leaflet-right {
+    right: var(--safe-right);
   }
 }
 

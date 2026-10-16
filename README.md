@@ -5,10 +5,14 @@ It is a mobile web app (PWA): plain HTML, CSS and JavaScript, with no build step
 
 | Phase | What | Status |
 | ----- | ---- | ------ |
-| 1 | Full-screen campus map, bottom sheet, theme switch, demo / pitch mode | Done |
-| 2 | `@snu.edu.in` login and campus geofence | Next |
-| 3 | OLED-black driver screen, GPS throttling, Screen Wake Lock | Planned |
-| 4 | Firebase Realtime Database, live caddies on the student map | Planned |
+| 1 | Full-screen campus map, bottom sheet, theme pill (Auto / Light / Dark), demo / pitch mode | Done |
+| 2 | Firebase project, `@snu.edu.in` Google login, campus geofence, QR driver-phone binding, admin dashboard, security rules + tests | Done |
+| 3 | OLED-black driver screen: GO, Seats open / Full, GPS throttling, Screen Wake Lock, `onDisconnect` | Next |
+| 4 | Live caddies on the student map, 90 s "Signal lost", service worker | Planned |
+
+- **For the SNU IT department:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+  (system design, security rules, threat model, free-tier budget, edge cases).
+- **Set up Firebase (free Spark plan):** [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).
 
 ## Run it on your computer
 
@@ -20,19 +24,46 @@ python3 -m http.server 8000
 
 Then open:
 
-- <http://localhost:8000/>: the normal app (no caddies until Phase 4)
+- <http://localhost:8000/>: the app. Until `js/firebase-config.js` has your
+  Firebase config, it runs without login (map + demo only).
 - <http://localhost:8000/?demo=1>: demo mode starts at once
 - <http://localhost:8000/?demo=1&speed=2>: demo at 2x speed (0.5 to 5)
 
 ES modules do not load from `file://`, so always use a local server.
 
+### Test login, geofence and driver binding without a Firebase project
+
+The Firebase emulators run Auth and the Database on your computer (needs
+Node.js 20+ and Java 11+):
+
+```bash
+npm install
+npm run emulators          # Auth :9099, Database :9000, Hosting :5000, UI :4000
+npm test                   # 28 security-rule tests
+```
+
+Open <http://localhost:5000/?emulator=1> (student app) and
+<http://localhost:5000/admin.html?emulator=1> (admin). See
+[`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md) for the full flow.
+
 ### Open it on your phone
 
 Connect the phone and the computer to the same Wi-Fi. Find the computer's
 local IP address (for example `192.168.1.20`) and open
-`http://192.168.1.20:8000/?demo=1` on the phone.
-Phase 1 works on plain `http`. From Phase 2, location needs `https`, so we
-will use Firebase Hosting.
+`http://192.168.1.20:8000/?demo=1` on the phone. The demo works on plain
+`http`, but location and the camera need `https`, so use Firebase Hosting
+(`npm run deploy`) for real tests.
+
+## Pages
+
+| Page | For | How to open |
+| ---- | --- | ----------- |
+| `index.html` | Students | The normal app address |
+| `driver.html` | A linked driver phone | Opens by itself on a linked phone |
+| `admin.html` | Admins | `…/admin.html` (SNU account on the admin list) |
+
+To link a driver phone: on the phone, tap the SNU Caddy logo **5 times
+quickly**, then scan the setup QR from the admin page.
 
 ## Map tiles: get a free CARTO key (2 minutes)
 
@@ -79,31 +110,53 @@ The demo is repeatable: it uses a fixed random seed, so every pitch looks the sa
 - **Tiles** load only when a pan or zoom ends (`updateWhenIdle`), with a small buffer.
 - **Glide animation** runs in one shared loop capped at 30 fps, and stops when no caddy moves.
 - **Turning** uses a CSS transition (GPU), not JavaScript frames.
-- **Page hidden** (app switched or phone locked): the demo clock and label timers stop.
-  In Phase 4 the database listeners will stop here too.
+- **Page hidden** (app switched or phone locked): the demo clock, label timers and
+  geofence re-checks stop. In Phase 4 the database connection closes here too.
+- **Geofence**: one quick, low-accuracy location check when the app opens, then one
+  every 5 minutes while it stays on screen. No continuous GPS on student phones.
+- **Driver phones** open `driver.html`: no map, no tiles, no Leaflet, pure black.
 - **No endless animations**: the selected caddy pulses twice, then stays still.
 - **Dark mode** uses pure black (`#000000`) surfaces, so OLED pixels switch off.
 
 ## Project structure
 
 ```
-index.html              page shell, theme set before first paint
+index.html              student app (map, sign-in, geofence, hidden driver setup)
+driver.html             OLED-black driver screen (linked phones only)
+admin.html              admin dashboard (fleet, setup QR codes, linked phones)
 manifest.webmanifest    PWA install data
-css/app.css             all styles (light + dark tokens)
+database.rules.json     Firebase security rules (the real access control)
+firebase.json           hosting, security headers, emulators
+css/
+  app.css               student app + shared tokens (light / dark)
+  driver.css            driver screen
+  admin.css             admin dashboard
 js/
-  main.js               connects everything
-  config.js             all settings: campus box, tiles, GPS rules, demo
+  main.js               student app: connects everything
+  config.js             all settings: campus box, tiles, GPS rules, geofence, demo
+  firebase-config.js    YOUR Firebase web config (public values)
+  firebase.js           loads the Firebase SDK on demand; emulator mode
+  auth.js               Google sign-in, @snu.edu.in check
+  student-gate.js       login -> geofence -> live data
+  geofence.js           one-shot, low-power campus check
+  enroll.js             setup codes, QR scanner, atomic enrollment
+  enroll-ui.js          hidden 5-tap setup dialog
+  driver.js             driver binding + live revoke check
+  admin.js              admin dashboard
   map.js                Leaflet map, campus lock, tile cross-fade
   caddy-layer.js        caddy icons: glide + rotate
   caddy-list.js         list rows in the sheet
   sheet.js              bottom sheet drag / snap (side panel on laptops)
-  theme.js              Auto / Light / Dark
+  theme.js              Auto / Light / Dark pill
   demo.js               demo simulator
   lib/geo.js            distance, bearing, small helpers
+  lib/polygon.js        point-in-polygon, distance to the fence
   lib/ping-gate.js      5 m / 30 s / 20 m rules (shared with Phase 3)
   data/campus.js        GENERATED: fence polygon, landmarks
   data/demo-routes.js   GENERATED: demo routes on real roads
-tools/build_campus_data.py   makes the two data files from OpenStreetMap
+tests/database.rules.test.mjs   28 security-rule tests (npm test)
+tools/build_campus_data.py      makes the two data files from OpenStreetMap
+docs/                   architecture + Firebase setup guide
 assets/                 icons, Inter font
 ```
 
@@ -127,4 +180,7 @@ two buildings called "Dining Hall 3"; the tool keeps the newer one.
 - Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL 1.0)
 - Basemaps © [CARTO](https://carto.com/attributions)
 - [Leaflet](https://leafletjs.com) 1.9.4 (BSD-2-Clause)
+- [Firebase JS SDK](https://firebase.google.com) 12.19.0 (Apache-2.0)
+- [jsQR](https://github.com/cozmo/jsQR) 1.4.0 (Apache-2.0), loaded only when a phone has no built-in QR reader
+- [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0.4 (MIT), admin page only
 - [Inter](https://rsms.me/inter/) font (SIL Open Font License 1.1, see `assets/fonts/OFL.txt`)

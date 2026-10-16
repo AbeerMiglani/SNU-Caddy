@@ -26,8 +26,9 @@ bindThemePill(theme, $('#theme-btn'), $('#theme-label'));
 const caddies = new Map();
 let selectedId = null;
 
-const layer = new CaddyLayer(mapApi.map, { onSelect: select });
-const sheet = createSheet($('#sheet'));
+// A tap on a map icon also brings that caddy's row into view in the sheet.
+const layer = new CaddyLayer(mapApi.map, { onSelect: (id) => select(id, { reveal: true }) });
+const sheet = createSheet($('#sheet'), { onChange: (cover) => mapApi.setCover(cover) });
 const list = createCaddyList({
   list: $('#caddy-list'),
   empty: $('#empty'),
@@ -44,6 +45,9 @@ function renderNow() {
   clearTimeout(renderTimer);
   renderTimer = 0;
   if (list.render(caddies, selectedId)) sheet.refresh();
+  // While the location card shows, no live data is loaded.
+  if ($('#sheet').classList.contains('is-gated'))
+    $('#summary').textContent = 'Live tracking paused';
 }
 
 function upsert(record) {
@@ -60,13 +64,14 @@ function removeCaddy(id) {
   scheduleRender();
 }
 
-function select(id) {
+function select(id, { reveal = false } = {}) {
   selectedId = id;
   layer.select(id);
   if (sheet.snap === 'full') sheet.setSnap('half'); // Show some map around the caddy.
   const at = layer.shownLatLng(id);
   if (at) mapApi.focus(at, sheet.cover());
   renderNow();
+  if (reveal) list.reveal(id);
 }
 
 function clearSelection() {
@@ -103,6 +108,7 @@ const gate = FIREBASE_ON
         onChange: () => {
           $('#sheet').classList.toggle('is-gated', !$('#gate').hidden);
           sheet.refresh();
+          renderNow();
         },
       },
     )
@@ -127,7 +133,10 @@ function setDemo(on) {
 }
 
 demoSwitch.addEventListener('click', () => setDemo(!demo.running));
-$('#empty-demo').addEventListener('click', () => setDemo(true));
+$('#empty-demo').addEventListener('click', () => {
+  setDemo(true);
+  demoSwitch.focus(); // The focused button just disappeared; keep keyboard focus nearby.
+});
 $('#login-demo').addEventListener('click', () => setDemo(true));
 
 // Hidden driver-phone setup: 5 quick taps on a logo, or a #enroll= link. A new

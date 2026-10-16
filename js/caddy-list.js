@@ -86,6 +86,8 @@ export function createCaddyList({ list, empty, summary, onSelect }) {
   function render(caddies, selectedId) {
     const now = Date.now();
     const wasEmpty = !empty.hidden;
+    // Moving a focused row in the DOM drops focus; put it back afterwards.
+    const focused = list.contains(document.activeElement) ? document.activeElement : null;
 
     for (const [id, row] of rows) {
       if (!caddies.has(id)) {
@@ -127,8 +129,20 @@ export function createCaddyList({ list, empty, summary, onSelect }) {
 
     empty.hidden = sorted.length > 0;
     list.hidden = sorted.length === 0;
+    if (focused?.isConnected && document.activeElement !== focused) {
+      focused.focus({ preventScroll: true });
+    }
     return wasEmpty !== !empty.hidden;
   }
 
-  return { render };
+  /** Scroll the list so this caddy's row is the first one in view (for map taps). */
+  function reveal(id) {
+    const row = rows.get(id);
+    const box = list.parentElement;
+    if (!row || !box) return;
+    const offset = row.li.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    box.scrollTo({ top: box.scrollTop + offset - 4, behavior: 'smooth' });
+  }
+
+  return { render, reveal };
 }

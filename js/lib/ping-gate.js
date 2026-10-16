@@ -26,8 +26,10 @@ export function createPingGate({ maxAccuracyM, minMoveM, heartbeatMs } = GPS_RUL
   return {
     /** @param {Fix} fix @returns {GateResult} */
     check(fix) {
-      // `!(a <= b)` also rejects a missing or NaN accuracy value.
-      if (!(fix.accuracy <= maxAccuracyM)) return { send: false, reason: 'inaccurate' };
+      // Reject missing, null, NaN and string accuracy values too.
+      if (!(typeof fix.accuracy === 'number' && fix.accuracy <= maxAccuracyM)) {
+        return { send: false, reason: 'inaccurate' };
+      }
 
       let reason = null;
       if (!lastSent) reason = 'first';

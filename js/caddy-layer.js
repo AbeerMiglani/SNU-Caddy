@@ -50,10 +50,13 @@ export class CaddyLayer {
     this.frame = this.frame.bind(this);
 
     // Leaflet moves markers itself during a zoom animation; do not fight it.
-    map.on('zoomstart', () => {
+    // Pause only during the CSS zoom animation ('zoomanim'), when Leaflet moves
+    // the markers itself. flyTo and drags do not need a pause, and a drag can
+    // cancel a flyTo without 'zoomend', so 'moveend' also resumes the loop.
+    map.on('zoomanim', () => {
       this.zooming = true;
     });
-    map.on('zoomend', () => {
+    map.on('zoomend moveend', () => {
       this.zooming = false;
       this.kick();
     });
@@ -191,7 +194,11 @@ export class CaddyLayer {
   /** Face the direction of travel. Prefer the phone's own heading when it is moving. */
   turn(it, c, target) {
     let heading = null;
-    if (Number.isFinite(c.heading) && (c.speed ?? 0) > 0.5) heading = c.heading;
+    // 1. The phone's own heading (only sent while the caddy moves).
+    if (Number.isFinite(c.heading)) heading = c.heading;
+    // 2. Known to be stopped: keep the last heading, so GPS noise cannot spin a parked caddy.
+    else if (Number.isFinite(c.speed) && c.speed <= 0.5) return;
+    // 3. Unknown speed: use the direction between the two pings.
     else if (distanceM(it.to, target) >= GLIDE.minTurnMoveM) heading = bearingDeg(it.to, target);
     if (heading === null) return;
     // Keep the angle unwrapped so 350 -> 10 turns +20, not -340.
@@ -211,7 +218,7 @@ export class CaddyLayer {
 
   frame(now) {
     this.raf = 0;
-    if (this.zooming) return; // zoomend calls kick() again.
+    if (this.zooming) return; // zoomend / moveend call kick() again.
     if (now - this.lastFrame < FRAME_MS - 1) {
       this.kick();
       return;

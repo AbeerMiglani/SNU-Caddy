@@ -99,15 +99,30 @@ export function createMap(el, initialTheme) {
     weight: 1.5,
   }).addTo(map);
 
-  // --- Zoom floor: the whole campus fits on screen, and no further out ----
-  function updateMinZoom() {
-    const z = map.getBoundsZoom(campusBounds, false);
+  // --- Camera limits that respect the sheet / side panel -------------------
+  // Leaflet's maxBounds and zoom floor work on the whole map box, but part of
+  // it is under the bottom sheet or the side panel. So: (1) the zoom floor lets
+  // the whole campus fit in the VISIBLE part, and (2) the lock is wider by the
+  // covered pixels, so every corner of campus can be panned into view.
+  let covered = { top: 0, bottom: 0, left: 0 };
+
+  function updateLimits() {
+    const size = map.getSize();
+    // An expanded sheet hides most of the map; do not let that pull the floor far out.
+    const bottom = Math.min(covered.bottom, size.y * 0.5);
+    const z = map.getBoundsZoom(campusBounds, false, L.point(covered.left, covered.top + bottom));
     map.setMinZoom(Math.floor(z / MAP.zoomSnap) * MAP.zoomSnap);
+
+    const zoom = map.getZoom();
+    const sw = map.project(lockBounds.getSouthWest(), zoom).add([-covered.left, covered.bottom]);
+    const ne = map.project(lockBounds.getNorthEast(), zoom).subtract([0, covered.top]);
+    map.setMaxBounds(L.latLngBounds(map.unproject(sw, zoom), map.unproject(ne, zoom)));
   }
 
   map.fitBounds(campusBounds);
-  updateMinZoom();
-  map.on('resize', updateMinZoom);
+  updateLimits();
+  // The lock is in pixels, so it changes with the zoom level.
+  map.on('zoomend resize', updateLimits);
 
   /**
    * Centre for `latlng` so it shows in the middle of the part of the map that
@@ -122,6 +137,12 @@ export function createMap(el, initialTheme) {
   return {
     map,
     setTheme,
+
+    /** The sheet or side panel moved: update the camera limits. */
+    setCover(next) {
+      covered = next;
+      updateLimits();
+    },
 
     /** Show the whole campus in the visible part of the screen. */
     fitCampus(cover, { animate = !reducedMotion.matches } = {}) {

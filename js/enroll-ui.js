@@ -120,7 +120,7 @@ export function setupEnrollment(triggers, dialog) {
       const result = await enrollThisPhone(fb, code);
       saveBinding(result);
       say(`Linked to ${result.name}. Opening the driver screen…`, 'ok');
-      setTimeout(() => location.replace('driver.html'), 900);
+      setTimeout(() => location.replace(`driver.html${location.search}`), 900);
     } catch (err) {
       if (err instanceof EnrollError) say(err.message, 'error');
       else if (err?.code === 'auth/operation-not-allowed')

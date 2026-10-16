@@ -1,16 +1,20 @@
 // Floating bottom sheet with three snap points: peek, half and full.
-// Drag the handle or the header; a quick flick moves one step.
+// Drag the handle, the header, or (below full) the list itself; a quick
+// flick moves one step. At full, the list scrolls instead.
 // On wide screens (laptop / projector for the pitch) it is a fixed side panel.
 
 const SNAPS = ['peek', 'half', 'full'];
 const FLICK_PX_PER_MS = 0.45;
+const FLICK_WINDOW_MS = 100;
 const TAP_SLOP_PX = 6;
+const SNAP_MS = 320; // keep in sync with .sheet.is-animating in app.css
 
 const wide = window.matchMedia('(min-width: 768px)');
 
 /**
  * @param {HTMLElement} sheet
- * @param {{ onChange?: () => void }} [opts]  called when the visible area settles
+ * @param {{ onChange?: (cover: { top: number, bottom: number, left: number }) => void }} [opts]
+ *   called with the covered map area whenever the sheet settles
  */
 export function createSheet(sheet, { onChange } = {}) {
   const grab = sheet.querySelector('.sheet__grab');
@@ -24,6 +28,14 @@ export function createSheet(sheet, { onChange } = {}) {
   let gapPx = 0;
   let drag = null;
   let justDragged = false;
+  let shrinkTimer = 0;
+
+  /** Pixels of map hidden by the sheet or side panel, for camera framing. */
+  function cover() {
+    const top = 76;
+    if (wide.matches) return { top, bottom: 0, left: sheet.getBoundingClientRect().right };
+    return { top, bottom: visible + gapPx, left: 0 };
+  }
 
   function measure() {
     const vh = window.innerHeight;
@@ -47,67 +59,112 @@ export function createSheet(sheet, { onChange } = {}) {
     sheet.style.transform = `translate3d(0, ${heights.full - px}px, 0)`;
   }
 
-  function settle() {
-    // The list scrolls inside the visible part only.
-    body.style.maxHeight = `${Math.max(0, visible - body.offsetTop)}px`;
+  /** The list scrolls inside the visible part only. */
+  function fitBody(animate) {
+    clearTimeout(shrinkTimer);
+    const apply = () => {
+      body.style.maxHeight = `${Math.max(0, visible - body.offsetTop)}px`;
+    };
+    const shrinking = visible - body.offsetTop < (parseFloat(body.style.maxHeight) || 0);
+    // When collapsing, keep the rows drawn until the slide-down has finished.
+    if (animate && shrinking) shrinkTimer = setTimeout(apply, SNAP_MS);
+    else apply();
+  }
+
+  function settle(animate) {
+    fitBody(animate);
+    sheet.classList.toggle('is-full', snap === 'full');
     root.style.setProperty('--sheet-visible', `${Math.round(visible)}px`);
     grab.setAttribute('aria-expanded', String(snap !== 'peek'));
     grab.setAttribute('aria-label', snap === 'full' ? 'Collapse caddy list' : 'Expand caddy list');
-    onChange?.();
+    onChange?.(cover());
   }
 
   function setSnap(next, animate = true) {
     if (wide.matches) return;
     snap = next;
     place(heights[snap], animate);
-    settle();
+    settle(animate);
   }
 
   // --- Drag -----------------------------------------------------------------
   function onDown(e) {
-    if (wide.matches || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    // Let real controls in the header (like the demo switch) work normally.
-    if (e.target.closest('button, a, input, [role="switch"]') && !grab.contains(e.target)) return;
     justDragged = false;
+    if (wide.matches || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    // At full the list scrolls; drags there do not move the sheet.
+    if (e.currentTarget === body && snap === 'full') return;
     drag = {
       id: e.pointerId,
+      zone: e.currentTarget,
       startY: e.clientY,
       startVisible: visible,
       moved: false,
       samples: [{ y: e.clientY, t: e.timeStamp }],
     };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // No pointer capture yet: a tap must still reach the row or button under the
+    // finger. Listen on the window, so a fast first move that leaves the handle
+    // is not lost.
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+  }
+
+  function endDrag() {
+    drag = null;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onCancel);
   }
 
   function onMove(e) {
     if (!drag || e.pointerId !== drag.id) return;
     const dy = e.clientY - drag.startY;
-    if (!drag.moved && Math.abs(dy) < TAP_SLOP_PX) return;
-    drag.moved = true;
+    if (!drag.moved) {
+      if (Math.abs(dy) < TAP_SLOP_PX) return;
+      drag.moved = true;
+      drag.zone.setPointerCapture(e.pointerId);
+      // Draw every row while the sheet is pulled up.
+      clearTimeout(shrinkTimer);
+      body.style.maxHeight = `${Math.max(0, heights.full - body.offsetTop)}px`;
+    }
     let px = drag.startVisible - dy;
     // Rubber band past the ends.
     if (px > heights.full) px = heights.full + (px - heights.full) * 0.2;
     if (px < heights.peek) px = heights.peek - (heights.peek - px) * 0.35;
     place(px, false);
     drag.samples.push({ y: e.clientY, t: e.timeStamp });
-    if (drag.samples.length > 6) drag.samples.shift();
+    if (drag.samples.length > 12) drag.samples.shift();
   }
 
   function onUp(e) {
     if (!drag || e.pointerId !== drag.id) return;
     const d = drag;
-    drag = null;
-    if (!d.moved) return; // A tap: the handle's click listener does the work.
+    endDrag();
+    if (!d.moved) return; // A tap: the row's or handle's own click does the work.
+    // Swallow the click that may follow this drag (see the listener below), but
+    // never a later, real tap.
     justDragged = true;
-    const first = d.samples[0];
-    const last = d.samples[d.samples.length - 1];
-    const v = (last.y - first.y) / Math.max(1, last.t - first.t); // + = down
-    const at = SNAPS.indexOf(snap);
+    setTimeout(() => {
+      justDragged = false;
+    }, 300);
+
+    // Speed over the last 100 ms only: a finger that rests before release is no flick.
+    d.samples.push({ y: e.clientY, t: e.timeStamp });
+    const recent = d.samples.filter((s) => e.timeStamp - s.t <= FLICK_WINDOW_MS);
+    const v =
+      recent.length >= 2
+        ? (recent[recent.length - 1].y - recent[0].y) /
+          Math.max(1, recent[recent.length - 1].t - recent[0].t)
+        : 0; // + = down
+
+    // Choose from where the sheet IS now, not where the drag started.
+    const byHeight = [...SNAPS].sort((a, b) => heights[a] - heights[b]);
     let next;
-    if (v > FLICK_PX_PER_MS) next = SNAPS[Math.max(0, at - 1)];
-    else if (v < -FLICK_PX_PER_MS) next = SNAPS[Math.min(SNAPS.length - 1, at + 1)];
+    if (v < -FLICK_PX_PER_MS) next = byHeight.find((s) => heights[s] > visible + 1) ?? 'full';
+    else if (v > FLICK_PX_PER_MS)
+      next = [...byHeight].reverse().find((s) => heights[s] < visible - 1) ?? 'peek';
     else
-      next = SNAPS.reduce((a, b) =>
+      next = byHeight.reduce((a, b) =>
         Math.abs(heights[b] - visible) < Math.abs(heights[a] - visible) ? b : a,
       );
     setSnap(next);
@@ -115,7 +172,7 @@ export function createSheet(sheet, { onChange } = {}) {
 
   function onCancel(e) {
     if (!drag || e.pointerId !== drag.id) return;
-    drag = null;
+    endDrag();
     setSnap(snap);
   }
 
@@ -124,29 +181,32 @@ export function createSheet(sheet, { onChange } = {}) {
     setSnap(SNAPS[(SNAPS.indexOf(snap) + 1) % SNAPS.length]);
   }
 
-  for (const zone of [grab, header]) {
-    zone.addEventListener('pointerdown', onDown);
-    zone.addEventListener('pointermove', onMove);
-    zone.addEventListener('pointerup', onUp);
-    zone.addEventListener('pointercancel', onCancel);
-  }
-  // Tap, click, Enter and Space all arrive here as one click event.
-  grab.addEventListener('click', () => {
-    if (justDragged) {
+  for (const zone of [grab, header, body]) zone.addEventListener('pointerdown', onDown);
+
+  // A drag that started on a row or button must not also "click" it.
+  sheet.addEventListener(
+    'click',
+    (e) => {
+      if (!justDragged) return;
       justDragged = false;
-      return;
-    }
-    cycle();
-  });
+      e.stopPropagation();
+      e.preventDefault();
+    },
+    true,
+  );
+  // Tap, click, Enter and Space on the handle all arrive here as one click event.
+  grab.addEventListener('click', cycle);
 
   // --- Layout mode ------------------------------------------------------------
   function layout() {
     if (wide.matches) {
+      clearTimeout(shrinkTimer);
       sheet.style.height = '';
       sheet.style.transform = '';
       body.style.maxHeight = '';
+      sheet.classList.remove('is-full');
       root.style.setProperty('--sheet-visible', '0px');
-      onChange?.();
+      onChange?.(cover());
       return;
     }
     measure();
@@ -173,11 +233,6 @@ export function createSheet(sheet, { onChange } = {}) {
         setSnap(snap, false);
       }
     },
-    /** Pixels of map hidden by the sheet or side panel, for camera framing. */
-    cover() {
-      const top = 76;
-      if (wide.matches) return { top, bottom: 0, left: sheet.getBoundingClientRect().right };
-      return { top, bottom: visible + gapPx, left: 0 };
-    },
+    cover,
   };
 }
