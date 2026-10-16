@@ -27,15 +27,14 @@ export const MAP = {
 };
 
 /**
- * CARTO basemaps need a free API key (new CARTO rule in 2026).
- *  1. Request it at https://carto.com/basemaps/apikey (email only, no account).
- *     Free for non-commercial use up to 5 million tile requests a month.
- *  2. Paste it below.
- *  3. In the CARTO dashboard, restrict the key to your website's domain.
+ * CARTO basemaps need a free API key (new CARTO rule in 2026): without one,
+ * every tile is an "API KEY REQUIRED" watermark (checked October 2026).
+ *  - Free for non-commercial use, up to 5 million tile requests a month.
+ *  - In the CARTO dashboard, restrict the key to the app's domains.
  * The key is public by design (it is in every tile URL), so it is safe in this file.
- * Until a key is set, the map uses grey OpenStreetMap tiles (good for development only).
+ * With no key, or if CARTO refuses the tiles, the map uses grey OpenStreetMap tiles.
  */
-export const CARTO_KEY = '';
+export const CARTO_KEY = 'cb1_4mna_1_ff92d71f8afbdac33e36e57a';
 
 /** CartoDB basemaps: Positron (light) and Dark Matter (dark). {r} = sharp @2x tiles on retina screens. */
 export const TILES = {
@@ -43,6 +42,8 @@ export const TILES = {
   dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key={key}',
   subdomains: 'abcd',
   key: CARTO_KEY,
+  /** CARTO raster tiles exist up to zoom 18; Leaflet scales them for zoom 19. */
+  maxNativeZoom: 18,
   attribution:
     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
     '&copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -52,6 +53,7 @@ export const TILES = {
    */
   fallback: {
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    maxNativeZoom: 19,
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },

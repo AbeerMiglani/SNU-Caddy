@@ -31,29 +31,59 @@ export function createMap(el, initialTheme) {
 
   // --- Tiles --------------------------------------------------------------
   // Battery: load tiles only when a pan/zoom ends, and keep a small buffer.
-  const useCarto = Boolean(TILES.key);
-  const tileOptions = {
+  let useCarto = Boolean(TILES.key);
+  const common = {
     subdomains: TILES.subdomains,
     key: TILES.key,
-    attribution: useCarto ? TILES.attribution : TILES.fallback.attribution,
     maxZoom: MAP.maxZoom,
     updateWhenIdle: true,
     updateWhenZooming: false,
     keepBuffer: 1,
   };
-  const urlFor = (theme) => (useCarto ? TILES[theme] : TILES.fallback.url);
-  if (!useCarto) {
+  const makeLayer = (theme) =>
+    useCarto
+      ? L.tileLayer(TILES[theme], {
+          ...common,
+          attribution: TILES.attribution,
+          maxNativeZoom: TILES.maxNativeZoom,
+        })
+      : L.tileLayer(TILES.fallback.url, {
+          ...common,
+          attribution: TILES.fallback.attribution,
+          maxNativeZoom: TILES.fallback.maxNativeZoom,
+        });
+
+  function useFallback(why) {
+    useCarto = false;
     // CSS makes these tiles grey / dark, so a theme change needs no new tiles.
     el.classList.add('tiles-fallback');
-    console.warn(
-      'SNU Caddy: no CARTO key in js/config.js, so the map uses grey OpenStreetMap tiles. ' +
-        'Get a free key at https://carto.com/basemaps/apikey',
-    );
+    console.warn(`SNU Caddy: ${why} The map uses grey OpenStreetMap tiles.`);
   }
-  let tiles = L.tileLayer(urlFor(initialTheme), tileOptions).addTo(map);
+  if (!useCarto) useFallback('no CARTO key in js/config.js (https://carto.com/basemaps/apikey).');
+
+  let tiles = makeLayer(initialTheme).addTo(map);
   let tileTheme = initialTheme;
   let incoming = null;
   let incomingTheme = null;
+
+  // A key restricted to other domains, a used-up quota or a revoked key makes
+  // CARTO refuse tiles. If the whole first screen fails while the phone is
+  // online, show the grey fallback instead of a blank map.
+  if (useCarto) {
+    const first = tiles;
+    let ok = 0;
+    let bad = 0;
+    first.on('tileload', () => ok++);
+    first.on('tileerror', () => bad++);
+    first.once('load', () => {
+      if (ok || !bad || tiles !== first || !navigator.onLine) return;
+      useFallback('CARTO refused the map tiles (check the key and its allowed domains).');
+      if (incoming) map.removeLayer(incoming);
+      incoming = incomingTheme = null;
+      tiles = makeLayer(tileTheme).addTo(map);
+      setTimeout(() => map.removeLayer(first)); // after Leaflet finishes its own work
+    });
+  }
 
   /** Cross-fade to the other basemap: the old layer goes away when the new one has loaded. */
   function setTheme(theme) {
@@ -64,7 +94,7 @@ export function createMap(el, initialTheme) {
       incoming = incomingTheme = null;
     }
     if (theme === tileTheme) return;
-    const next = L.tileLayer(urlFor(theme), tileOptions);
+    const next = makeLayer(theme);
     incoming = next;
     incomingTheme = theme;
     // 'load' also fires when every tile FAILED (offline): keep the old basemap then.

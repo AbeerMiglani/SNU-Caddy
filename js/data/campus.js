@@ -10,6 +10,11 @@ export const CAMPUS_BBOX = [[28.5178089, 77.5679531], [28.5338032, 77.5815529]];
 /** Places used for "Near <name>" labels. */
 export const LANDMARKS = [
   {
+    "name": "A Block",
+    "lat": 28.526457,
+    "lng": 77.576974
+  },
+  {
     "name": "Amphitheatre",
     "lat": 28.524044,
     "lng": 77.574049
@@ -20,34 +25,19 @@ export const LANDMARKS = [
     "lng": 77.572823
   },
   {
+    "name": "B Block",
+    "lat": 28.526304,
+    "lng": 77.576535
+  },
+  {
     "name": "Biodiversity Park",
     "lat": 28.521272,
     "lng": 77.576353
   },
   {
-    "name": "Block A",
-    "lat": 28.526457,
-    "lng": 77.576974
-  },
-  {
-    "name": "Block B",
-    "lat": 28.526304,
-    "lng": 77.576535
-  },
-  {
-    "name": "Block C",
+    "name": "C Block",
     "lat": 28.52581,
     "lng": 77.576026
-  },
-  {
-    "name": "Block D",
-    "lat": 28.525378,
-    "lng": 77.575816
-  },
-  {
-    "name": "Central Library",
-    "lat": 28.524988,
-    "lng": 77.574294
   },
   {
     "name": "Cricket Ground",
@@ -55,17 +45,22 @@ export const LANDMARKS = [
     "lng": 77.57297
   },
   {
-    "name": "Dining Hall 1",
+    "name": "D Block",
+    "lat": 28.525378,
+    "lng": 77.575816
+  },
+  {
+    "name": "DH1",
     "lat": 28.52375,
     "lng": 77.57347
   },
   {
-    "name": "Dining Hall 2",
+    "name": "DH2",
     "lat": 28.524482,
     "lng": 77.570218
   },
   {
-    "name": "Dining Hall 3",
+    "name": "DH3",
     "lat": 28.523218,
     "lng": 77.569649
   },
@@ -78,11 +73,6 @@ export const LANDMARKS = [
     "name": "Football Ground",
     "lat": 28.522341,
     "lng": 77.571422
-  },
-  {
-    "name": "Gate 1",
-    "lat": 28.533458,
-    "lng": 77.576302
   },
   {
     "name": "Gate 2",
@@ -145,9 +135,14 @@ export const LANDMARKS = [
     "lng": 77.570858
   },
   {
-    "name": "Main Entrance",
-    "lat": 28.533412,
-    "lng": 77.576255
+    "name": "Library",
+    "lat": 28.524988,
+    "lng": 77.574294
+  },
+  {
+    "name": "Main Gate",
+    "lat": 28.533458,
+    "lng": 77.576302
   },
   {
     "name": "Management Block",

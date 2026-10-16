@@ -55,17 +55,17 @@ ROAD_COST = {
 }
 
 # Landmarks shown as "Near <name>" in the app: OSM name -> display name.
+# Display names follow what students say on campus (A Block, DH1, Main Gate).
 # Only well-known places are listed so labels stay useful.
 LANDMARKS = {
-    "SNU Gate No. 1": "Gate 1",
+    "SNU Gate No. 1": "Main Gate",
     "SNU Gate No. 2": "Gate 2",
-    "Entrance Security Office": "Main Entrance",
     "Shiv Nadar University Post Office": "Post Office",
-    "Block A": "Block A",
-    "Block B": "Block B",
-    "Block C": "Block C",
-    "Block D": "Block D",
-    "Central Library": "Central Library",
+    "Block A": "A Block",
+    "Block B": "B Block",
+    "Block C": "C Block",
+    "Block D": "D Block",
+    "Central Library": "Library",
     "Management Block": "Management Block",
     "Research Annexe": "Research Annexe",
     "Hostel 1A": "Hostel 1A",
@@ -77,9 +77,9 @@ LANDMARKS = {
     "Hostel 3A": "Hostel 3A",
     "Hostel 3B": "Hostel 3B",
     "Hostel 3C": "Hostel 3C",
-    "Dining Hall 1": "Dining Hall 1",
-    "Dining Hall 2": "Dining Hall 2",
-    "Dining Hall 3": "Dining Hall 3",
+    "Dining Hall 1": "DH1",
+    "Dining Hall 2": "DH2",
+    "Dining Hall 3": "DH3",
     "Health and wellness centre, SNU": "Health Centre",
     "Auctus Supermarket": "Auctus Supermarket",
     "Indoor Sports Complex": "Indoor Sports Complex",
@@ -92,8 +92,12 @@ LANDMARKS = {
     "SNU Biodiversity Park": "Biodiversity Park",
 }
 
-# OSM has two buildings named "Dining Hall 3". The 2019 one is skipped; the
-# 2026 edit by the same mapper is kept. Check this with someone on campus.
+# OSM has two buildings named "Dining Hall 3":
+#  - way 1473676593 (mapped 2026, detailed outline) stands in the hostel
+#    cluster, with six dormitory buildings within 125 m. This is DH3.
+#  - way 729630264 (mapped 2019, simple box) stands alone next to Faculty
+#    Residence, 800+ m from DH1, DH2 and the Indoor Sports Complex. What it
+#    really is still needs checking on campus, so it gets no label.
 SKIP_WAY_IDS = {"729630264"}
 
 # Demo loops. Each caddy drives stop to stop and then back to the first stop.
@@ -102,22 +106,22 @@ DEMO_ROUTES = [
         "id": "caddy-01",
         "name": "Caddy 01",
         "line": "Gate shuttle",
-        "stops": ["Gate 1", "Management Block", "Central Library", "Block A",
+        "stops": ["Main Gate", "Management Block", "Library", "A Block",
                   "Research Annexe", "Gate 2"],
     },
     {
         "id": "caddy-02",
         "name": "Caddy 02",
         "line": "Hostel loop",
-        "stops": ["Hostel 3A", "Dining Hall 2", "Indoor Sports Complex",
-                  "Hostel 2B", "Dining Hall 1", "Central Library", "Health Centre"],
+        "stops": ["Hostel 3A", "DH2", "DH3", "Indoor Sports Complex",
+                  "Hostel 2B", "DH1", "Library", "Health Centre"],
     },
     {
         "id": "caddy-03",
         "name": "Caddy 03",
         "line": "Academic loop",
-        "stops": ["Block D", "Central Library", "Hostel 1A",
-                  "Auctus Supermarket", "Management Block", "Block C"],
+        "stops": ["D Block", "Library", "Hostel 1A",
+                  "Auctus Supermarket", "Management Block", "C Block"],
     },
 ]
 

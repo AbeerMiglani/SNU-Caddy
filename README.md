@@ -71,20 +71,22 @@ local IP address (for example `192.168.1.20`) and open
 To link a driver phone: on the phone, tap the SNU Caddy logo **5 times
 quickly**, then scan the setup QR from the admin page.
 
-## Map tiles: get a free CARTO key (2 minutes)
+## Map tiles (CARTO key)
 
-In 2026, CARTO started to require a free API key for its basemaps. Without
-the key, every tile shows an "API KEY REQUIRED" watermark. Until you add a
-key, the app uses grey OpenStreetMap tiles. They are good for development,
-but the OSM tile policy does not allow heavy use.
+The app uses the CARTO **Positron** (light) and **Dark Matter** (dark)
+basemaps. Since 2026, CARTO requires a free API key: without it, every tile
+shows an "API KEY REQUIRED" watermark. The project key is already in
+`CARTO_KEY` in [`js/config.js`](js/config.js).
 
-1. Go to <https://carto.com/basemaps/apikey> and request a key with your email.
-   It is free for non-commercial use, up to 5 million tile requests a month.
-2. Paste the key into `CARTO_KEY` in [`js/config.js`](js/config.js).
-3. In the CARTO dashboard, restrict the key to your website's domain.
-
-The key is public by design (it is part of every tile URL), so it is safe to
-commit it.
+- The key is public by design (it is part of every tile URL), so it is safe
+  to commit. In the CARTO dashboard, restrict it to your website's domain.
+- CARTO raster tiles go up to zoom 18. At zoom 19 the map scales the zoom-18
+  tiles (`maxNativeZoom: 18`).
+- **Fallback:** if `CARTO_KEY` is empty, or CARTO refuses the key, the map
+  uses grey OpenStreetMap tiles instead. They are good for development, but
+  the OSM tile policy does not allow heavy use.
+- To use a different key: get one at <https://carto.com/basemaps/apikey>
+  (free for non-commercial use, up to 5 million tile requests a month).
 
 ## Demo / pitch mode
 
@@ -93,9 +95,9 @@ SNU roads, and a fourth caddy is parked and offline:
 
 | Caddy | Route | Shows |
 | ----- | ----- | ----- |
-| Caddy 01 | Gate shuttle: Gate 1, Management Block, Central Library, Block A, Research Annexe, Gate 2 (4.0 km) | Seats open / Full |
-| Caddy 02 | Hostel loop: Hostel 3A, Dining Hall 2, Indoor Sports Complex, Hostel 2B, Dining Hall 1, Central Library, Health Centre (2.1 km) | Full / Seats open |
-| Caddy 03 | Academic loop: Block D, Central Library, Hostel 1A, Auctus Supermarket, Management Block, Block C (1.7 km) | Seats open / Full |
+| Caddy 01 | Gate shuttle: Main Gate, Management Block, Library, A Block, Research Annexe, Gate 2 (4.0 km) | Seats open / Full |
+| Caddy 02 | Hostel loop: Hostel 3A, DH2, DH3, Indoor Sports Complex, Hostel 2B, DH1, Library, Health Centre (2.2 km) | Full / Seats open |
+| Caddy 03 | Academic loop: D Block, Library, Hostel 1A, Auctus Supermarket, Management Block, C Block (1.7 km) | Seats open / Full |
 | Caddy 04 | Parked at Parking 1 | Offline |
 
 Each virtual caddy acts like a real driver phone. It makes one GPS fix per
@@ -179,8 +181,15 @@ python3 tools/build_campus_data.py
 It uses only the Python standard library. To change the demo routes or the
 landmark names, edit the lists at the top of that file.
 
-Please check the landmark names with someone who knows the campus. OSM has
-two buildings called "Dining Hall 3"; the tool keeps the newer one.
+Please check the landmark names with someone who knows the campus:
+
+- OSM has two buildings called "Dining Hall 3". The tool labels the one
+  between the hostels (west, OSM way 1473676593) as **DH3**. The other one
+  (east, next to the faculty residences, way 729630264) is far from DH1, DH2
+  and the Indoor Sports Complex, so the tool skips it until someone confirms
+  what it is.
+- OSM has no "Arcade" and no "Towers" building (the `tower` tags on campus
+  are power pylons), so these are not on the map yet.
 
 ## Credits and licences
 
