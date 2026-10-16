@@ -66,13 +66,14 @@ export const FIREBASE_CONFIG = {
 
 ## Step 6: Upload the rules and publish the app
 
-You need Node.js 20 or newer (<https://nodejs.org>).
+You need Node.js 22 or newer (<https://nodejs.org>). For `npm test` you also
+need a Java 21+ JDK (the test runs the Firebase Database Emulator).
 
 ```bash
 npm install                 # installs the Firebase CLI and the test tools
 npx firebase login          # opens a browser window to sign in
 npx firebase use --add      # pick your project, alias: default
-npm test                    # 28 security-rule tests in the local emulator
+npm test                    # 29 security-rule tests in a local emulator
 npm run deploy              # uploads database.rules.json and the website
 ```
 
@@ -110,7 +111,9 @@ On the admin page, under **Caddies**, add each caddy: number `1`, name
 ## Step 9: Link each driver phone (once per phone)
 
 1. On the driver's Android phone, open `https://<project-id>.firebaseapp.com`
-   in Chrome. Optional but better: **⋮ → Add to Home screen / Install app**.
+   in Chrome and install it: **⋮ → Add to Home screen / Install app**. Open
+   SNU Caddy from the new home-screen icon. (Installed apps get persistent
+   storage, so Android does not clear the phone's link.)
 2. Tap the **SNU Caddy** logo **5 times quickly**. The setup screen opens.
 3. On the admin page, under **Link a driver phone**, choose the caddy and
    click **Create setup QR**.
@@ -137,7 +140,8 @@ Google**, choose their `@snu.edu.in` account, and allow location once.
 
 ## Test everything locally first (no Firebase project needed)
 
-The Firebase emulators run the same Auth and Database on your computer:
+The Firebase emulators run the same Auth and Database on your computer. You
+need Node.js 22+ and a Java 21+ JDK.
 
 ```bash
 npm install
@@ -146,6 +150,12 @@ npm run emulators           # Auth :9099, Database :9000, Hosting :5000, UI :400
 
 Then open <http://localhost:5000/?emulator=1> (student app) and
 <http://localhost:5000/admin.html?emulator=1> (admin). Google sign-in shows a
-fake account page from the emulator. To make your test account an admin,
-open the Emulator UI at <http://127.0.0.1:4000> → Realtime Database, and add
-`admins/<uid>: true`.
+fake account page from the emulator. To make your test account an admin:
+
+1. Open the Emulator UI at <http://127.0.0.1:4000> → **Realtime Database**.
+2. In the database list at the top, choose **demo-snu-caddy-default-rtdb**
+   (the one that has our security rules; the app uses it).
+3. Add `admins/<uid>: true`.
+
+`npm test` starts its own emulator, so stop `npm run emulators` (Ctrl-C)
+before you run it.

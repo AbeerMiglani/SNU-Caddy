@@ -14,7 +14,7 @@
 //    real, unused, unexpired code. From then on, only this uid can write to
 //    caddies/{caddyId}. An admin revokes the phone by deleting drivers/{uid}.
 
-import { readOnce } from './firebase.js';
+import { readOnce, waitConnected } from './firebase.js';
 
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford base32: no I, L, O, U
 export const CODE_RE = /^[0-9A-HJKMNP-TV-Z]{24}$/;
@@ -71,16 +71,20 @@ function deviceLabel() {
 }
 
 /**
- * Bind this phone to the caddy that the code belongs to.
- * The caller must confirm first if a student is signed in on this phone.
- * @returns {Promise<{ caddyId: string, name: string, uid: string }>}
+ * Step 1: check the code with the session that is already on the phone (a
+ * student's, or a new anonymous one). Nothing changes yet, so a typo or an
+ * expired code does not sign a student out.
+ * @returns {Promise<{ caddyId: string, expiresAt: number }>}
  */
-export async function enrollThisPhone(fb, code) {
+export async function checkSetupCode(fb, code) {
   const { A, D, auth, db } = fb;
-  if (auth.currentUser && !auth.currentUser.isAnonymous) await A.signOut(auth);
+  await auth.authStateReady();
   if (!auth.currentUser) await A.signInAnonymously(auth);
-  const uid = auth.currentUser.uid;
-
+  try {
+    await waitConnected(fb);
+  } catch {
+    throw new EnrollError('No connection. Check the internet and try again.');
+  }
   const snap = await D.get(D.ref(db, `enrollCodes/${code}`));
   if (!snap.exists()) {
     throw new EnrollError('This setup code does not exist. Check it, or make a new one.');
@@ -93,8 +97,24 @@ export async function enrollThisPhone(fb, code) {
   if (info.expiresAt <= Date.now() + offset) {
     throw new EnrollError('This setup code has expired. Make a new one on the admin page.');
   }
+  return info;
+}
+
+/**
+ * Step 2: become an anonymous driver phone and claim the code, in ONE atomic
+ * update. The security rules accept it only for a valid, unused, unexpired code.
+ * The caller confirms first if a student is signed in on this phone.
+ * @returns {Promise<{ caddyId: string, name: string, uid: string }>}
+ */
+export async function claimSetupCode(fb, code, info) {
+  const { A, D, auth, db } = fb;
+  if (auth.currentUser && !auth.currentUser.isAnonymous) await A.signOut(auth);
+  if (!auth.currentUser) await A.signInAnonymously(auth);
+  const uid = auth.currentUser.uid;
 
   try {
+    // Not raced against a timeout: a queued write would still reach the server
+    // later and link the phone, while the phone thinks it failed.
     await D.update(D.ref(db), {
       [`drivers/${uid}`]: {
         caddyId: info.caddyId,
@@ -110,9 +130,11 @@ export async function enrollThisPhone(fb, code) {
     throw new EnrollError('The code was not accepted. Make a new one and try again.');
   }
 
-  const name = (await D.get(D.ref(db, `fleet/${info.caddyId}/name`))).val() ?? info.caddyId;
+  const name = await D.get(D.ref(db, `fleet/${info.caddyId}/name`))
+    .then((s) => s.val() ?? info.caddyId)
+    .catch(() => info.caddyId);
   // Ask the browser not to clear this site's storage under pressure, so the
-  // phone stays linked. (Installed apps usually get this.)
+  // phone stays linked. Chrome grants this to installed apps.
   navigator.storage?.persist?.().catch(() => {});
   return { caddyId: info.caddyId, name, uid };
 }
@@ -146,22 +168,30 @@ export async function startScanner(video, onCode) {
     video: { facingMode: { ideal: 'environment' } },
     audio: false,
   });
-  video.srcObject = stream;
-  video.setAttribute('playsinline', '');
-  video.muted = true;
-  await video.play();
-
   let detector = null;
-  if ('BarcodeDetector' in window) {
-    try {
-      const formats = await window.BarcodeDetector.getSupportedFormats();
-      if (formats.includes('qr_code'))
-        detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-    } catch {
-      detector = null;
+  let jsQR = null;
+  try {
+    video.srcObject = stream;
+    video.setAttribute('playsinline', '');
+    video.muted = true;
+    await video.play();
+    if ('BarcodeDetector' in window) {
+      try {
+        const formats = await window.BarcodeDetector.getSupportedFormats();
+        if (formats.includes('qr_code')) {
+          detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        }
+      } catch {
+        detector = null;
+      }
     }
+    if (!detector) jsQR = await loadJsQR();
+  } catch (err) {
+    // Never leave the camera on after a failed start.
+    for (const track of stream.getTracks()) track.stop();
+    video.srcObject = null;
+    throw err;
   }
-  const jsQR = detector ? null : await loadJsQR();
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
@@ -203,21 +233,4 @@ export async function startScanner(video, onCode) {
   };
   tick();
   return { stop };
-}
-
-// --- Hidden entry: 5 quick taps -------------------------------------------------
-
-/** Call `onOpen` after 5 taps on `el`, each less than 600 ms after the last. */
-export function onFiveTaps(el, onOpen) {
-  let count = 0;
-  let last = 0;
-  el.addEventListener('click', (e) => {
-    const now = e.timeStamp;
-    count = now - last < 600 ? count + 1 : 1;
-    last = now;
-    if (count >= 5) {
-      count = 0;
-      onOpen();
-    }
-  });
 }

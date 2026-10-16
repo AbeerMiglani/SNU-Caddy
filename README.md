@@ -33,18 +33,24 @@ ES modules do not load from `file://`, so always use a local server.
 
 ### Test login, geofence and driver binding without a Firebase project
 
-The Firebase emulators run Auth and the Database on your computer (needs
-Node.js 20+ and Java 11+):
+The Firebase emulators run Auth and the Database on your computer. You need
+Node.js 22+ and a Java 21+ JDK.
 
 ```bash
 npm install
 npm run emulators          # Auth :9099, Database :9000, Hosting :5000, UI :4000
-npm test                   # 28 security-rule tests
 ```
 
 Open <http://localhost:5000/?emulator=1> (student app) and
 <http://localhost:5000/admin.html?emulator=1> (admin). See
 [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md) for the full flow.
+
+The automated tests start their own emulator, so stop `npm run emulators`
+(Ctrl-C) first:
+
+```bash
+npm test                   # 29 security-rule tests + 1 page check
+```
 
 ### Open it on your phone
 
@@ -154,7 +160,8 @@ js/
   lib/ping-gate.js      5 m / 30 s / 20 m rules (shared with Phase 3)
   data/campus.js        GENERATED: fence polygon, landmarks
   data/demo-routes.js   GENERATED: demo routes on real roads
-tests/database.rules.test.mjs   28 security-rule tests (npm test)
+tests/database.rules.test.mjs   29 security-rule tests (npm test)
+tests/modulepreload.test.mjs    keeps the preload list in index.html in sync
 tools/build_campus_data.py      makes the two data files from OpenStreetMap
 docs/                   architecture + Firebase setup guide
 assets/                 icons, Inter font

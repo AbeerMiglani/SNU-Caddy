@@ -42,7 +42,7 @@ flowchart LR
 | Driver app | `driver.html`, `js/driver.js` | One dedicated Android phone per caddy |
 | Admin dashboard | `admin.html`, `js/admin.js` | SNU accounts on the admin list |
 | Security rules | `database.rules.json` | Enforced by Firebase on every read and write |
-| Rules tests | `tests/database.rules.test.mjs` | 28 automated tests (`npm test`) |
+| Rules tests | `tests/database.rules.test.mjs` | 29 automated tests (`npm test`) |
 
 ## 2. Roles and sign-in
 
@@ -79,8 +79,10 @@ sequenceDiagram
 - `localStorage` holds only a hint (`caddy_03`) so that the phone opens the
   driver screen at once. The real permission is `drivers/{uid}` in the
   database, checked by the rules on every write.
-- Firebase keeps the anonymous session in IndexedDB. The app asks the browser
-  for persistent storage, so Android does not clear it under storage pressure.
+- Firebase keeps the anonymous session in IndexedDB. The driver page asks the
+  browser for persistent storage on every start. Chrome grants it once the app
+  is installed (Add to Home screen), so the setup guide makes installing a
+  required step. Then Android does not clear the session under storage pressure.
 
 ## 3. Data model: one small object per caddy
 
@@ -118,8 +120,10 @@ dashboard (expired ones at once, used ones after 24 hours).
    - send it only if the caddy moved **5 m** from the last sent fix, or
      **30 s** passed (heartbeat).
 2. **Database**: the write overwrites `caddies/{id}`. The rules check the
-   sender, the fields, the campus box, and the server timestamp, and they
-   allow at most one position write per second per caddy.
+   sender, the fields, the campus box, and the server timestamp. A GPS field
+   (lat, lng, bearing, accuracy) can change only together with a new server
+   timestamp, at most once per second per caddy. Status taps (Seats open /
+   Full) and Go offline are human actions and are not rate-limited.
 3. **Student phones**: one WebSocket listener (`onValue` on `caddies`)
    receives the change. There is **no polling**. The icon glides to the new
    point and turns to the direction of travel.
@@ -141,9 +145,10 @@ dashboard (expired ones at once, used ones after 24 hours).
 Validation on `caddies/{id}`: lat/lng inside the campus box (also protects
 the driver's privacy off campus), `accuracy` ≤ 20 m, `status` is `open` or
 `full`, `bearing` 0–360, `online` boolean, `lastUpdated` = server time, no
-extra fields, and the caddy must exist in `fleet`.
+extra fields, and the caddy must exist in `fleet`. GPS fields change only
+with a new `lastUpdated`, at most once per second.
 
-The rules are tested with the Firebase Emulator: 28 tests, one per attack
+The rules are tested with the Firebase Emulator: 29 tests, one per attack
 or allowed action (`npm test`).
 
 ## 6. Threat model
@@ -156,11 +161,13 @@ or allowed action (`npm test`).
 | Guessing setup codes | 120-bit codes, and the code list cannot be read. No short PIN. |
 | Non-SNU people read caddy positions | Rules need a **verified** `@snu.edu.in` email. Look-alike domains (`@snu.edu.in.evil.com`) fail (tested). Non-SNU Google accounts are deleted right after sign-in. |
 | The Firebase web config is "public" | It is public by design. Security is in the rules, not in the config. Optional: restrict the browser API key to the app's domains (setup guide). |
-| A bound phone sends junk or floods writes | Field validation, campus box, accuracy limit, server timestamps, and at most 1 position write per second. |
+| A bound phone sends junk or floods writes | Field validation, campus box, accuracy limit, server timestamps, and at most 1 position write per second (GPS fields cannot change without a new timestamp; tested). Status taps are not limited; an abusive phone is revoked. |
+| A setup QR is replaced or left on screen | When the admin makes a new code, signs out or closes the page, the unused code is deleted at once. Unused codes also expire after 10 minutes. |
 | Driver location outside work | Positions outside the campus box are rejected. In Phase 3 the phone shares only between GO and Go Offline. |
 | Student location privacy | The geofence check runs **on the phone**. The location is never sent or stored. |
 | Ghost caddies (dead battery, closed app, dead zone) | `onDisconnect()` sets `online: false` on the server (tested). Students also dim any caddy whose `lastUpdated` is older than **90 s** and label it "Signal lost". |
-| Script injection (XSS) | All text goes into the page with `textContent`. Third-party scripts are pinned and use Subresource Integrity. Pages cannot be framed (`frame-ancestors 'none'`). A strict Content-Security-Policy follows in Phase 4, after a test against the live project. |
+| Script injection (XSS) | All text goes into the page with `textContent`. Leaflet, jsQR and qrcode-generator are pinned and use Subresource Integrity. The Firebase SDK is pinned to 12.19.0 on Google's gstatic CDN; it loads as ES modules, which cannot carry SRI (self-hosting it is planned with the Phase 4 service worker). Pages cannot be framed (`frame-ancestors 'none'`). A strict Content-Security-Policy follows in Phase 4, after a test against the live project. |
+| Students who graduate or leave | Firebase keeps a session until sign-out, even after the Google Workspace account is disabled. Options for IT: (a) disable or delete old users in Firebase Authentication each semester, or (b) add one rule line that requires a fresh sign-in every N days (`auth.token.auth_time`). The current build keeps students signed in, as requested. |
 | Geofence bypass with developer tools | Accepted: the geofence is a usage policy, not a security boundary. The data is protected by the SNU login. |
 
 ## 7. Free-tier budget (Spark plan)

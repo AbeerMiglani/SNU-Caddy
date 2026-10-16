@@ -17,7 +17,8 @@ const EMULATOR_CONFIG = {
   apiKey: 'demo-key',
   authDomain: 'localhost',
   projectId: 'demo-snu-caddy',
-  databaseURL: 'http://127.0.0.1:9000/?ns=demo-snu-caddy',
+  // `firebase emulators:start` loads database.rules.json into this namespace.
+  databaseURL: 'http://127.0.0.1:9000/?ns=demo-snu-caddy-default-rtdb',
   appId: 'demo-app',
 };
 
@@ -25,6 +26,13 @@ const EMULATOR_CONFIG = {
 export const FIREBASE_ON = USE_EMULATOR || FIREBASE_CONFIG !== null;
 
 let loading = null;
+let failed = false;
+
+/**
+ * True after the SDK failed to download. Browsers remember a failed module
+ * import for the rest of the page's life, so only a page reload can retry.
+ */
+export const firebaseLoadFailed = () => failed;
 
 /**
  * @returns {Promise<{ auth: any, db: any, A: any, D: any }>}
@@ -39,7 +47,12 @@ export function loadFirebase() {
       import(`${SDK}/firebase-database.js`),
     ]);
     const app = appSdk.initializeApp(USE_EMULATOR ? EMULATOR_CONFIG : FIREBASE_CONFIG);
-    const auth = A.getAuth(app); // Session is kept in IndexedDB: signed in until sign-out.
+    // The session is kept in IndexedDB: signed in until sign-out. No popup /
+    // redirect helper here: on phones the default one loads Google scripts and
+    // a hidden iframe on EVERY launch. auth.js passes it only to the sign-in calls.
+    const auth = A.initializeAuth(app, {
+      persistence: [A.indexedDBLocalPersistence, A.browserLocalPersistence],
+    });
     const db = D.getDatabase(app);
     if (USE_EMULATOR) {
       A.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
@@ -47,10 +60,27 @@ export function loadFirebase() {
     }
     return { auth, db, A, D };
   })().catch((err) => {
-    loading = null; // Allow a retry (for example after a network drop).
+    failed = true; // See firebaseLoadFailed(): the UI offers a reload.
     throw err;
   });
   return loading;
+}
+
+/** Resolve when the database connection is up; reject after `ms` (offline). */
+export function waitConnected(fb, ms = 10_000) {
+  return new Promise((resolve, reject) => {
+    let off = () => {};
+    const timer = setTimeout(() => {
+      off();
+      reject(new Error('offline'));
+    }, ms);
+    off = fb.D.onValue(fb.D.ref(fb.db, '.info/connected'), (snap) => {
+      if (snap.val() !== true) return;
+      clearTimeout(timer);
+      queueMicrotask(() => off());
+      resolve();
+    });
+  });
 }
 
 /** Read a value once, also for local paths such as .info/serverTimeOffset. */

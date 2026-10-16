@@ -11,6 +11,10 @@ __pycache__/
 # Node (if tooling is added later)
 node_modules/
 
+# Firebase CLI / emulator files
+.firebase/
+*-debug.log
+
 # Raw OpenStreetMap downloads (tools/build_campus_data.py --osm-file ...)
 *.osm
 

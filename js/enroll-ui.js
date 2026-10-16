@@ -1,23 +1,32 @@
-// Hidden driver-phone setup screen: 5 quick taps on the logo, or a
-// #enroll=CODE link from the admin QR. See js/enroll.js for the security model.
+// Hidden driver-phone setup screen. main.js loads this module only when it is
+// needed: after 5 quick taps on a logo, or for a #enroll=CODE link from the
+// admin QR. See js/enroll.js for the security model.
 
 import { isSnuUser } from './auth.js';
 import { saveBinding } from './driver.js';
 import {
   EnrollError,
-  enrollThisPhone,
+  checkSetupCode,
+  claimSetupCode,
   formatCode,
   normalizeCode,
-  onFiveTaps,
   startScanner,
 } from './enroll.js';
-import { FIREBASE_ON, loadFirebase } from './firebase.js';
+import { FIREBASE_ON, firebaseLoadFailed, loadFirebase } from './firebase.js';
+
+let ui = null;
 
 /**
- * @param {Element[]} triggers  the logos (header logo, and the one on the sign-in screen)
+ * Open the setup dialog.
  * @param {HTMLDialogElement} dialog
+ * @param {string|null} [fromLink]  a '#enroll=CODE' hash, if the app was opened from the QR
  */
-export function setupEnrollment(triggers, dialog) {
+export function openEnrollment(dialog, fromLink = null) {
+  ui ??= createUi(dialog);
+  ui.open(fromLink ? normalizeCode(fromLink) : null);
+}
+
+function createUi(dialog) {
   const $ = (sel) => dialog.querySelector(sel);
   const form = $('#enroll-form');
   const input = $('#enroll-code');
@@ -27,6 +36,7 @@ export function setupEnrollment(triggers, dialog) {
   const scanBtn = $('#enroll-scan-btn');
   const linkBtn = $('#enroll-link');
   let scanner = null;
+  let starting = null; // token of a camera start that is still in progress
   let busy = false;
 
   const say = (text, state = '') => {
@@ -35,18 +45,18 @@ export function setupEnrollment(triggers, dialog) {
   };
 
   function stopScan() {
+    starting = null; // a start that is still running stops itself when it ends
     scanner?.stop();
     scanner = null;
     scanBox.hidden = true;
     scanBtn.textContent = 'Scan QR code';
   }
 
-  function open(prefill = null) {
-    if (dialog.open) return;
-    say(FIREBASE_ON ? '' : 'Firebase is not set up yet (docs/FIREBASE_SETUP.md).', 'error');
-    input.value = prefill ? formatCode(prefill) : '';
-    dialog.showModal();
-    if (prefill) say('Setup code received. Tap “Link this phone”.');
+  function setBusy(on) {
+    busy = on;
+    // aria-disabled, not disabled: disabling the focused button would drop focus.
+    linkBtn.setAttribute('aria-disabled', String(on));
+    scanBtn.setAttribute('aria-disabled', String(on));
   }
 
   dialog.addEventListener('close', stopScan);
@@ -57,7 +67,9 @@ export function setupEnrollment(triggers, dialog) {
   });
 
   scanBtn.addEventListener('click', async () => {
-    if (scanner) {
+    if (busy) return;
+    // While the camera starts or runs, this button is "Stop camera".
+    if (scanner || starting) {
       stopScan();
       return;
     }
@@ -65,18 +77,28 @@ export function setupEnrollment(triggers, dialog) {
       say('The camera needs the https:// address. Type the code instead.', 'error');
       return;
     }
+    const token = {};
+    starting = token;
     scanBox.hidden = false;
     scanBtn.textContent = 'Stop camera';
     say('Point the camera at the setup QR.');
     try {
-      scanner = await startScanner(video, (code) => {
+      const started = await startScanner(video, (code) => {
         scanner = null;
         scanBox.hidden = true;
         scanBtn.textContent = 'Scan QR code';
         input.value = formatCode(code);
         link(code);
       });
+      // Cancelled, closed or hidden while the camera was starting.
+      if (starting !== token || !dialog.open || document.hidden) {
+        started.stop();
+        return;
+      }
+      starting = null;
+      scanner = started;
     } catch (err) {
+      if (starting !== token) return;
       stopScan();
       say(
         err?.name === 'NotAllowedError'
@@ -101,12 +123,12 @@ export function setupEnrollment(triggers, dialog) {
 
   async function link(code) {
     if (busy || !FIREBASE_ON) return;
-    busy = true;
-    linkBtn.disabled = scanBtn.disabled = true;
-    say('Linking this phone…');
+    setBusy(true);
+    say('Checking the setup code…');
     try {
       const fb = await loadFirebase();
-      await fb.auth.authStateReady();
+      // 1. Check the code first: a typo must not sign a student out.
+      const info = await checkSetupCode(fb, code);
       const current = fb.auth.currentUser;
       if (
         isSnuUser(current) &&
@@ -117,29 +139,34 @@ export function setupEnrollment(triggers, dialog) {
         say('Not linked.');
         return;
       }
-      const result = await enrollThisPhone(fb, code);
+      // 2. Claim it.
+      say('Linking this phone…');
+      const result = await claimSetupCode(fb, code, info);
       saveBinding(result);
       say(`Linked to ${result.name}. Opening the driver screen…`, 'ok');
       setTimeout(() => location.replace(`driver.html${location.search}`), 900);
     } catch (err) {
       if (err instanceof EnrollError) say(err.message, 'error');
+      else if (firebaseLoadFailed())
+        say('No connection. Check the internet, then reload the page.', 'error');
       else if (err?.code === 'auth/operation-not-allowed')
         say('Anonymous sign-in is off. (Admin: turn it on in Firebase Authentication.)', 'error');
       else if (err?.code === 'auth/network-request-failed')
         say('No connection. Check the internet and try again.', 'error');
       else say('Linking did not work. Try again, or make a new code.', 'error');
     } finally {
-      busy = false;
-      linkBtn.disabled = scanBtn.disabled = false;
+      setBusy(false);
     }
   }
 
-  for (const trigger of triggers) onFiveTaps(trigger, () => open());
-
-  // Opened from the QR with the phone's camera app: …/#enroll=CODE
-  if (/[#&]enroll=/.test(location.hash)) {
-    const code = normalizeCode(location.hash);
-    history.replaceState(null, '', location.pathname + location.search); // Do not keep the code in the URL bar.
-    if (code) open(code);
-  }
+  return {
+    open(prefill) {
+      if (!dialog.open) {
+        say(FIREBASE_ON ? '' : 'Firebase is not set up yet (docs/FIREBASE_SETUP.md).', 'error');
+        input.value = prefill ? formatCode(prefill) : '';
+        dialog.showModal();
+      }
+      if (prefill) say('Setup code received. Tap “Link this phone”.');
+    },
+  };
 }

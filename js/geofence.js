@@ -37,9 +37,22 @@ export async function locationPermission() {
 }
 
 function getPosition(options) {
-  return new Promise((resolve, reject) =>
-    navigator.geolocation.getCurrentPosition(resolve, reject, options),
-  );
+  return new Promise((resolve, reject) => {
+    // The API's own timeout starts only after permission is granted, so an
+    // unanswered permission prompt would wait forever. Give up after a while.
+    const watchdog = setTimeout(() => reject({ code: 3 }), options.timeout + 10_000);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(watchdog);
+        resolve(pos);
+      },
+      (err) => {
+        clearTimeout(watchdog);
+        reject(err);
+      },
+      options,
+    );
+  });
 }
 
 /** @returns {Promise<FenceResult>} */

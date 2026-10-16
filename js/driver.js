@@ -44,6 +44,13 @@ export async function verifyLink(binding, els, onUnlinked) {
   els.status.textContent = 'Checking link…';
   els.status.dataset.state = 'checking';
 
+  // Ask again on every start: Chrome grants persistent storage once the app is
+  // installed, so a phone installed after linking is protected from then on.
+  navigator.storage
+    ?.persisted?.()
+    .then((yes) => yes || navigator.storage.persist())
+    .catch(() => {});
+
   let stopListening = null;
   let unlinked = false;
   const unlink = async (fb, message) => {
@@ -62,11 +69,13 @@ export async function verifyLink(binding, els, onUnlinked) {
   try {
     fb = await loadFirebase();
   } catch {
-    // No network on boot: stay a driver phone; Phase 3 retries in its loop.
+    // No network on boot: stay a driver phone. A failed SDK download can only be
+    // retried by a reload, so reload by itself when the network comes back.
     els.status.textContent = FIREBASE_ON
       ? 'No connection. This phone stays linked.'
       : 'Firebase is not set up yet (docs/FIREBASE_SETUP.md).';
     els.status.dataset.state = 'offline';
+    if (FIREBASE_ON) window.addEventListener('online', () => location.reload(), { once: true });
     return;
   }
 
@@ -87,6 +96,10 @@ export async function verifyLink(binding, els, onUnlinked) {
         return;
       }
       const { caddyId } = snap.val();
+      if (!CADDY_ID_RE.test(caddyId)) {
+        await unlink(fb, 'This phone is no longer linked. Ask an admin for a new setup code.');
+        return;
+      }
       const name = await fb.D.get(fb.D.ref(fb.db, `fleet/${caddyId}/name`))
         .then((s) => s.val() ?? caddyId)
         .catch(() => binding.name || caddyId);

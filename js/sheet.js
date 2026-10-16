@@ -66,9 +66,19 @@ export function createSheet(sheet, { onChange } = {}) {
       body.style.maxHeight = `${Math.max(0, visible - body.offsetTop)}px`;
     };
     const shrinking = visible - body.offsetTop < (parseFloat(body.style.maxHeight) || 0);
-    // When collapsing, keep the rows drawn until the slide-down has finished.
-    if (animate && shrinking) shrinkTimer = setTimeout(apply, SNAP_MS);
-    else apply();
+    // When collapsing, keep the rows drawn until the slide-down has finished,
+    // then keep the selected row in view (below full, the list cannot be scrolled).
+    if (animate && shrinking) {
+      shrinkTimer = setTimeout(() => {
+        apply();
+        const sel = body.querySelector('.row.is-selected');
+        if (!sel) return;
+        const r = sel.getBoundingClientRect();
+        const b = body.getBoundingClientRect();
+        if (r.bottom > b.bottom) body.scrollTop += r.bottom - b.bottom + 8;
+        else if (r.top < b.top) body.scrollTop -= b.top - r.top + 8;
+      }, SNAP_MS);
+    } else apply();
   }
 
   function settle(animate) {

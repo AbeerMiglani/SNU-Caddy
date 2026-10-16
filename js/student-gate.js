@@ -5,9 +5,15 @@
 //   AND the app is on screen
 //   AND demo mode is off (the demo has its own fake data).
 
-import { isSnuUser, rejectAccount, signInErrorText, signInWithSnu } from './auth.js';
+import {
+  finishRedirect,
+  isSnuUser,
+  rejectAccount,
+  signInErrorText,
+  signInWithSnu,
+} from './auth.js';
 import { GEOFENCE } from './config.js';
-import { loadFirebase } from './firebase.js';
+import { firebaseLoadFailed, loadFirebase } from './firebase.js';
 import { checkCampus, locationPermission } from './geofence.js';
 
 const ASKED_KEY = 'snucaddy.locationAsked';
@@ -16,6 +22,7 @@ const CARDS = {
   checking: {
     title: 'Checking you are on campus…',
     text: 'This takes a few seconds.',
+    action: 'Checking…', // stays on screen (disabled) so keyboard focus is kept
   },
   ask: {
     title: 'Live caddies are for students on campus',
@@ -73,6 +80,7 @@ function recall(key) {
  *   login: HTMLElement, loginButton: HTMLButtonElement, loginError: HTMLElement,
  *   card: HTMLElement, cardTitle: HTMLElement, cardText: HTMLElement, cardAction: HTMLButtonElement,
  *   account: HTMLElement, accountEmail: HTMLElement, signOut: HTMLButtonElement,
+ *   behindLogin: HTMLElement[],
  * }} els
  * @param {{
  *   onLive: (on: boolean, ctx: { fb: any, user: any }) => void,
@@ -90,6 +98,7 @@ export function createStudentGate(els, { onLive, onChange }) {
   let live = false;
   let checking = false;
   let recheckTimer = 0;
+  let loginShown = false;
 
   const signedIn = () => isSnuUser(user);
 
@@ -111,6 +120,12 @@ export function createStudentGate(els, { onLive, onChange }) {
     // the sign-in button for students who are already signed in).
     els.login.hidden = demo || (authKnown && signedIn());
     els.login.dataset.state = authKnown ? 'ready' : 'loading';
+    // The sign-in screen is modal: the map and its controls behind it are inert
+    // (not focusable, not read by screen readers).
+    for (const el of els.behindLogin) el.inert = !els.login.hidden;
+    const showsButton = !els.login.hidden && authKnown;
+    if (showsButton && !loginShown) els.loginButton.focus({ preventScroll: true });
+    loginShown = showsButton;
     els.account.hidden = demo || !signedIn();
     if (signedIn()) els.accountEmail.textContent = user.email;
 
@@ -123,7 +138,8 @@ export function createStudentGate(els, { onLive, onChange }) {
       els.cardText.textContent = card.text;
       els.cardAction.hidden = !card.action;
       els.cardAction.textContent = card.action ?? '';
-      els.cardAction.disabled = checking;
+      // aria-disabled, not disabled: disabling the focused button would drop focus.
+      els.cardAction.setAttribute('aria-disabled', String(checking));
     }
     updateLive();
     onChange?.();
@@ -147,8 +163,12 @@ export function createStudentGate(els, { onLive, onChange }) {
     checking = true;
     if (!fence || fence.kind !== 'inside') fence = { kind: 'checking' };
     render();
-    const result = await checkCampus({ fresh: userAction });
-    checking = false;
+    let result;
+    try {
+      result = await checkCampus({ fresh: userAction });
+    } finally {
+      checking = false;
+    }
     if (result.kind === 'inside' || result.kind === 'outside') remember(ASKED_KEY);
     fence = result;
     fenceAt = Date.now();
@@ -180,6 +200,11 @@ export function createStudentGate(els, { onLive, onChange }) {
 
   // --- Sign-in --------------------------------------------------------------------
   els.loginButton.addEventListener('click', async () => {
+    // A failed SDK download is remembered by the browser until the page reloads.
+    if (firebaseLoadFailed()) {
+      location.reload();
+      return;
+    }
     showLoginError('');
     els.loginButton.disabled = true;
     try {
@@ -208,11 +233,12 @@ export function createStudentGate(els, { onLive, onChange }) {
       fb = await loadFirebase();
     } catch (err) {
       authKnown = true;
-      showLoginError('Can’t reach SNU Caddy. Check your internet, then tap Continue.');
+      showLoginError('Can’t reach SNU Caddy. Check your internet, then tap Continue to try again.');
       render();
       throw err;
     }
-    fb.A.getRedirectResult(fb.auth).catch((err) => showLoginError(signInErrorText(err)));
+    // Finish a redirect sign-in (installed app) before reading the session.
+    await finishRedirect(fb).catch((err) => showLoginError(signInErrorText(err)));
     fb.A.onAuthStateChanged(fb.auth, async (u) => {
       authKnown = true;
       if (u && !u.isAnonymous && !isSnuUser(u)) {

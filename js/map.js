@@ -67,12 +67,19 @@ export function createMap(el, initialTheme) {
     const next = L.tileLayer(urlFor(theme), tileOptions);
     incoming = next;
     incomingTheme = theme;
+    // 'load' also fires when every tile FAILED (offline): keep the old basemap then.
+    let loaded = 0;
+    next.on('tileload', () => loaded++);
     next.once('load', () => {
       if (incoming !== next) return;
+      incoming = incomingTheme = null;
+      if (!loaded) {
+        setTimeout(() => map.removeLayer(next)); // after Leaflet finishes its own work
+        return;
+      }
       map.removeLayer(tiles);
       tiles = next;
       tileTheme = theme;
-      incoming = incomingTheme = null;
     });
     next.addTo(map);
   }
@@ -108,9 +115,17 @@ export function createMap(el, initialTheme) {
 
   function updateLimits() {
     const size = map.getSize();
-    // An expanded sheet hides most of the map; do not let that pull the floor far out.
-    const bottom = Math.min(covered.bottom, size.y * 0.5);
+    // Phones: plan for a sheet of 45-50% of the screen, so small peek-height
+    // changes (empty card -> caddy rows) do not move the floor and re-zoom the map,
+    // and an expanded sheet does not pull the floor far out.
+    const bottom =
+      covered.bottom > 0 ? Math.min(size.y * 0.5, Math.max(covered.bottom, size.y * 0.45)) : 0;
+    // getBoundsZoom never returns less than the current minZoom, so lift that
+    // floor while measuring, or the floor could only ever go up.
+    const floor = map.options.minZoom;
+    map.options.minZoom = 0;
     const z = map.getBoundsZoom(campusBounds, false, L.point(covered.left, covered.top + bottom));
+    map.options.minZoom = floor;
     map.setMinZoom(Math.floor(z / MAP.zoomSnap) * MAP.zoomSnap);
 
     const zoom = map.getZoom();

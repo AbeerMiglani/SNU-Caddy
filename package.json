@@ -7,7 +7,7 @@
   "scripts": {
     "serve": "python3 -m http.server 8000",
     "emulators": "firebase emulators:start --project demo-snu-caddy",
-    "test": "firebase emulators:exec --only database --project demo-snu-caddy \"node --test --test-concurrency=1 'tests/**/*.test.mjs'\"",
+    "test": "firebase emulators:exec --only database --project demo-snu-caddy \"node --test --test-concurrency=1 tests/database.rules.test.mjs tests/modulepreload.test.mjs\"",
     "deploy": "firebase deploy --only hosting,database"
   },
   "devDependencies": {
@@ -16,6 +16,6 @@
     "firebase-tools": "15.34.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

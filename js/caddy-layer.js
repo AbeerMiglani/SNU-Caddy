@@ -2,7 +2,8 @@
 // face the direction of travel, like the cars in Uber.
 //
 // Battery notes:
-//  - One shared animation loop for all caddies, capped at GLIDE.fps.
+//  - One shared animation loop for all caddies, capped at GLIDE.fps; between
+//    frames it sleeps on a timer, so 90-120 Hz screens do not wake it more often.
 //  - The loop stops completely when no caddy is moving.
 //  - requestAnimationFrame does not run while the tab is hidden.
 //  - Turning uses a CSS transition (runs on the GPU, no JS per frame).
@@ -216,11 +217,20 @@ export class CaddyLayer {
     if (!this.raf) this.raf = requestAnimationFrame(this.frame);
   }
 
+  /** Next frame in about `ms`: sleep with a timer, then align to the screen refresh. */
+  later(ms) {
+    this.raf = setTimeout(() => {
+      this.raf = requestAnimationFrame(this.frame);
+    }, ms);
+  }
+
   frame(now) {
     this.raf = 0;
     if (this.zooming) return; // zoomend / moveend call kick() again.
+    // Too early (a ping arrived between frames): wait for the 30 fps slot without
+    // waking up on every 60-120 Hz screen refresh.
     if (now - this.lastFrame < FRAME_MS - 1) {
-      this.kick();
+      this.later(FRAME_MS - (now - this.lastFrame));
       return;
     }
     this.lastFrame = now;
@@ -236,6 +246,6 @@ export class CaddyLayer {
         moving = true;
       }
     }
-    if (moving) this.kick();
+    if (moving) this.later(FRAME_MS - 8);
   }
 }

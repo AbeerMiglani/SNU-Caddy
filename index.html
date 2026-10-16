@@ -14,13 +14,29 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
 
-    <!-- A linked driver phone opens the OLED driver screen at once (no map, no tiles). -->
+    <!-- A linked driver phone opens the OLED driver screen at once (no map, no tiles).
+         Everyone else: fetch all app modules in parallel, not as a chain of round trips. -->
     <script>
-      try {
-        if (localStorage.getItem('snucaddy.driver') && !/enroll=/.test(location.hash)) {
-          location.replace('driver.html' + location.search);
-        }
-      } catch (e) {}
+      (function () {
+        try {
+          var b = JSON.parse(localStorage.getItem('snucaddy.driver'));
+          if (b && /^caddy_\d{2}$/.test(b.caddyId) && b.uid && !/enroll=/.test(location.hash)) {
+            location.replace('driver.html' + location.search);
+            return;
+          }
+        } catch (e) {}
+        // Keep in sync with the imports of js/main.js (checked by tests/modulepreload.test.mjs).
+        var modules =
+          'main caddy-layer caddy-list config demo firebase firebase-config map sheet ' +
+          'student-gate auth geofence theme data/campus data/demo-routes lib/geo ' +
+          'lib/ping-gate lib/polygon lib/five-taps';
+        modules.split(' ').forEach(function (m) {
+          var link = document.createElement('link');
+          link.rel = 'modulepreload';
+          link.href = 'js/' + m + '.js';
+          document.head.appendChild(link);
+        });
+      })();
     </script>
 
     <!-- Set the theme before first paint, so dark-mode users never see a white flash. -->
@@ -127,8 +143,10 @@
       <div class="sheet__body" id="sheet-body">
         <!-- Geofence / location card (Phase 2). Replaces the list while shown. -->
         <div class="gate" id="gate" hidden>
-          <p class="gate__title" id="gate-title"></p>
-          <p class="gate__text" id="gate-text"></p>
+          <div role="status">
+            <p class="gate__title" id="gate-title"></p>
+            <p class="gate__text" id="gate-text"></p>
+          </div>
           <button class="btn btn--primary" id="gate-action" type="button"></button>
         </div>
         <ul class="list" id="caddy-list" hidden></ul>

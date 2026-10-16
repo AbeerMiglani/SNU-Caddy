@@ -49,10 +49,11 @@
     </main>
 
     <script type="module">
-      import { readBinding, verifyLink } from './js/driver.js';
+      import { clearBinding, readBinding, verifyLink } from './js/driver.js';
 
       const binding = readBinding();
       if (!binding) {
+        clearBinding(); // A broken binding would bounce between the two pages forever.
         location.replace('./' + location.search);
       } else {
         verifyLink(

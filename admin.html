@@ -67,6 +67,12 @@
         </p>
       </section>
 
+      <section class="card" id="view-offline" hidden>
+        <h1>Can’t reach SNU Caddy</h1>
+        <p class="hint">Check the internet connection, then reload this page.</p>
+        <button class="btn btn--primary" id="reload" type="button">Reload</button>
+      </section>
+
       <section class="card" id="view-signin" hidden>
         <h1>Admin sign-in</h1>
         <p class="hint">Use your @snu.edu.in Google account.</p>
@@ -104,7 +110,8 @@
           <div class="code-box" id="code-box" hidden>
             <div class="code-qr" id="code-qr" role="img" aria-label="Setup QR code"></div>
             <p class="code-text" id="code-text"></p>
-            <p class="code-meta" id="code-meta" role="status"></p>
+            <p class="code-meta" id="code-meta"></p>
+            <p class="sr-only" id="code-status" role="status"></p>
           </div>
           <p class="error" id="code-error" role="alert"></p>
         </section>
@@ -125,6 +132,8 @@
             </table>
           </div>
           <p class="hint" id="drivers-empty">No phones are linked yet.</p>
+          <p class="hint" id="drivers-status" role="status"></p>
+          <p class="error" id="drivers-error" role="alert"></p>
         </section>
 
         <section class="card" aria-labelledby="h-fleet">

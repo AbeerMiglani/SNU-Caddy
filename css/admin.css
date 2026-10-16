@@ -87,10 +87,14 @@ body.admin {
   font-size: 14px;
 }
 
+.hint:empty {
+  margin: 0;
+}
+
 .error {
   min-height: 1em;
   margin: 10px 0 0;
-  color: var(--status-full);
+  color: var(--error-text);
   font-size: 14px;
 }
 
@@ -149,8 +153,8 @@ body.admin {
 }
 
 .btn--danger {
-  border-color: var(--status-full);
-  color: var(--status-full);
+  border-color: var(--error-text);
+  color: var(--error-text);
 }
 
 .btn:not(.btn--primary):not(.btn--small) {

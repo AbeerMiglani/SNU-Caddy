@@ -3,14 +3,21 @@
 // is not signed in as an admin can read or change nothing.
 /* global qrcode */
 
-import { isSnuUser, rejectAccount, signInErrorText, signInWithSnu } from './auth.js';
+import {
+  finishRedirect,
+  isSnuUser,
+  rejectAccount,
+  signInErrorText,
+  signInWithSnu,
+} from './auth.js';
 import { formatCode, newSetupCode } from './enroll.js';
 import { FIREBASE_ON, loadFirebase, readOnce } from './firebase.js';
 
 const CODE_LIFE_MS = 10 * 60_000;
 const CLEAN_AFTER_MS = 24 * 60 * 60_000;
+const SLOW_WRITE_MS = 10_000;
 const $ = (id) => document.getElementById(id);
-const VIEWS = ['loading', 'config', 'signin', 'denied', 'admin'];
+const VIEWS = ['loading', 'config', 'offline', 'signin', 'denied', 'admin'];
 
 function show(view) {
   for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
@@ -23,12 +30,21 @@ function el(tag, text = null, className = '') {
   return node;
 }
 
+$('reload').addEventListener('click', () => location.reload());
+
 if (FIREBASE_ON) boot();
 else show('config');
 
 async function boot() {
-  const fb = await loadFirebase();
-  fb.A.getRedirectResult(fb.auth).catch((err) => {
+  let fb;
+  try {
+    fb = await loadFirebase();
+  } catch {
+    // A failed SDK download can only be retried by reloading the page.
+    show('offline');
+    return;
+  }
+  await finishRedirect(fb).catch((err) => {
     $('signin-error').textContent = signInErrorText(err);
   });
 
@@ -75,12 +91,28 @@ async function boot() {
   });
 }
 
+/** Wait for a server-confirmed write; after a while, tell the admin it is still waiting. */
+async function confirmed(promise, onSlow) {
+  const slow = setTimeout(onSlow, SLOW_WRITE_MS);
+  try {
+    return await promise;
+  } finally {
+    clearTimeout(slow);
+  }
+}
+
 function startAdmin(fb, user) {
   const { D, db } = fb;
   let fleet = {};
   let drivers = {};
+  let connected = false;
   let stopCode = null;
+  let creating = false;
+  let codeGen = 0;
 
+  const offConnected = D.onValue(D.ref(db, '.info/connected'), (snap) => {
+    connected = snap.val() === true;
+  });
   const offFleet = D.onValue(D.ref(db, 'fleet'), (snap) => {
     fleet = snap.val() ?? {};
     renderFleet();
@@ -125,12 +157,16 @@ function startAdmin(fb, user) {
     const num = Number($('fleet-num').value);
     const name = $('fleet-name').value.trim();
     if (!(num >= 1 && num <= 99) || !name) return;
+    if (!connected) {
+      $('fleet-error').textContent = 'No connection. The caddy was not saved.';
+      return;
+    }
     const id = `caddy_${String(num).padStart(2, '0')}`;
     try {
       await D.set(D.ref(db, `fleet/${id}`), { name });
       $('fleet-form').reset();
     } catch {
-      $('fleet-error').textContent = 'Could not save the caddy. Check your connection.';
+      $('fleet-error').textContent = 'Could not save the caddy.';
     }
   };
 
@@ -157,36 +193,66 @@ function startAdmin(fb, user) {
   }
 
   async function revokePhone(uid, d) {
-    const ok = window.confirm(
-      `Unlink this phone from ${caddyName(d.caddyId)}? It can no longer send locations, at once.`,
-    );
-    if (!ok) return;
-    await D.remove(D.ref(db, `drivers/${uid}`));
-    // Students should not see a ghost caddy from a revoked phone.
-    const live = await D.get(D.ref(db, `caddies/${d.caddyId}`));
-    if (live.exists() && live.val().online) {
-      await D.update(D.ref(db, `caddies/${d.caddyId}`), { online: false });
+    const name = caddyName(d.caddyId);
+    $('drivers-error').textContent = '';
+    // The database applies writes locally first: offline, the row would vanish
+    // although the server never heard of the revoke.
+    if (!connected) {
+      $('drivers-error').textContent = `No connection. The phone of ${name} was NOT unlinked.`;
+      return;
+    }
+    if (
+      !window.confirm(`Unlink this phone from ${name}? It can no longer send locations, at once.`)
+    ) {
+      return;
+    }
+    $('drivers-status').textContent = `Unlinking the phone of ${name}…`;
+    try {
+      await confirmed(D.remove(D.ref(db, `drivers/${uid}`)), () => {
+        $('drivers-status').textContent =
+          'Still waiting for the connection. Keep this page open until it says "Unlinked".';
+      });
+      // Students should not see a ghost caddy from a revoked phone.
+      const live = await D.get(D.ref(db, `caddies/${d.caddyId}`));
+      if (live.exists() && live.val().online) {
+        await D.update(D.ref(db, `caddies/${d.caddyId}`), { online: false });
+      }
+      $('drivers-status').textContent =
+        `Unlinked. The phone of ${name} can no longer send locations.`;
+    } catch {
+      $('drivers-status').textContent = '';
+      $('drivers-error').textContent = `The phone of ${name} was NOT unlinked. Try again.`;
     }
   }
 
   // --- Setup QR codes -------------------------------------------------------------
   $('code-form').onsubmit = async (e) => {
     e.preventDefault();
+    if (creating) return; // a double click must not make two codes
     $('code-error').textContent = '';
     const caddyId = $('code-caddy').value;
     if (!caddyId) {
       $('code-error').textContent = 'Add a caddy first (below).';
       return;
     }
-    stopCode?.();
+    if (!connected) {
+      $('code-error').textContent = 'No connection. Try again when the page is online.';
+      return;
+    }
+    creating = true;
     try {
+      stopCode?.(); // also deletes the previous code if nobody used it
+      stopCode = null;
       stopCode = await showNewCode(caddyId);
     } catch {
-      $('code-error').textContent = 'Could not create a setup code. Check your connection.';
+      $('code-error').textContent = 'Could not create a setup code. Try again.';
+    } finally {
+      creating = false;
     }
   };
 
   async function showNewCode(caddyId) {
+    const gen = ++codeGen;
     const offset = (await readOnce(fb, '.info/serverTimeOffset')).val() ?? 0;
     const serverNow = () => Date.now() + offset;
     const code = newSetupCode();
@@ -207,9 +273,14 @@ function startAdmin(fb, user) {
     $('code-text').textContent = formatCode(code);
     $('code-box').hidden = false;
     $('code-box').dataset.state = 'live';
+    // Screen readers hear state changes only, not the per-second countdown.
+    $('code-status').textContent =
+      `Setup code for ${caddyName(caddyId)} created. It expires in 10 minutes.`;
 
     const meta = $('code-meta');
+    let used = false;
     const tick = () => {
+      if (gen !== codeGen) return;
       const left = Math.max(0, expiresAt - serverNow());
       if (left === 0) {
         finish('expired', 'Expired. Create a new code.');
@@ -223,27 +294,39 @@ function startAdmin(fb, user) {
     tick();
 
     const offUse = D.onValue(D.ref(db, `enrollCodes/${code}/usedBy`), (snap) => {
-      if (snap.exists()) finish('used', `Linked. ${caddyName(caddyId)} now has a driver phone.`);
+      if (!snap.exists()) return;
+      used = true;
+      finish('used', `Linked. ${caddyName(caddyId)} now has a driver phone.`);
     });
 
     function finish(state, text) {
       clearInterval(timer);
       offUse();
+      if (gen !== codeGen) return; // a newer code owns the screen
       $('code-box').dataset.state = state;
       $('code-qr').replaceChildren();
       $('code-text').textContent = '';
       meta.textContent = text;
+      $('code-status').textContent = text;
     }
 
+    // Called when the code is replaced, the admin signs out, or the page closes:
+    // a code that was shown but not used must not stay valid off screen.
     return () => {
       clearInterval(timer);
       offUse();
+      if (!used) D.remove(D.ref(db, `enrollCodes/${code}`)).catch(() => {});
     };
   }
 
+  const onPageHide = () => stopCode?.();
+  window.addEventListener('pagehide', onPageHide);
+
   return () => {
+    offConnected();
     offFleet();
     offDrivers();
+    window.removeEventListener('pagehide', onPageHide);
     stopCode?.();
   };
 }

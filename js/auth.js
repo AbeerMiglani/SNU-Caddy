@@ -24,18 +24,24 @@ export async function signInWithSnu(fb) {
   const provider = new A.GoogleAuthProvider();
   // `hd` makes Google show only university accounts; `prompt` lets people pick one.
   provider.setCustomParameters({ hd: AUTH.domain, prompt: 'select_account' });
-  if (standalone()) return A.signInWithRedirect(auth, provider);
+  const resolver = A.browserPopupRedirectResolver; // loaded only for an actual sign-in
+  if (standalone()) return A.signInWithRedirect(auth, provider, resolver);
   try {
-    return await A.signInWithPopup(auth, provider);
+    return await A.signInWithPopup(auth, provider, resolver);
   } catch (err) {
     if (
       err?.code === 'auth/popup-blocked' ||
       err?.code === 'auth/operation-not-supported-in-this-environment'
     ) {
-      return A.signInWithRedirect(auth, provider);
+      return A.signInWithRedirect(auth, provider, resolver);
     }
     throw err;
   }
+}
+
+/** Finish a sign-in that came back by full-page redirect (cheap when there was none). */
+export function finishRedirect(fb) {
+  return fb.A.getRedirectResult(fb.auth, fb.A.browserPopupRedirectResolver);
 }
 
 /**

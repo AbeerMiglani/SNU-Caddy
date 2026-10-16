@@ -4,8 +4,8 @@
 import { CaddyLayer } from './caddy-layer.js';
 import { createCaddyList } from './caddy-list.js';
 import { DemoSimulator } from './demo.js';
-import { setupEnrollment } from './enroll-ui.js';
 import { FIREBASE_ON } from './firebase.js';
+import { onFiveTaps } from './lib/five-taps.js';
 import { createMap } from './map.js';
 import { createSheet } from './sheet.js';
 import { createStudentGate } from './student-gate.js';
@@ -99,6 +99,7 @@ const gate = FIREBASE_ON
         account: $('#account'),
         accountEmail: $('#account-email'),
         signOut: $('#sign-out'),
+        behindLogin: [$('#map'), $('.topbar'), $('#sheet')],
       },
       {
         // Phase 4 attaches / detaches the live `caddies` listener here.
@@ -139,9 +140,15 @@ $('#empty-demo').addEventListener('click', () => {
 });
 $('#login-demo').addEventListener('click', () => setDemo(true));
 
-// Hidden driver-phone setup: 5 quick taps on a logo, or a #enroll= link. A new
-// driver phone is signed out, so the logo on the sign-in screen works too.
-setupEnrollment([$('#brand'), $('.login__logo')], $('#enroll'));
+// Hidden driver-phone setup, loaded only when used: 5 quick taps on a logo, or a
+// #enroll= link from the admin QR. A new driver phone is signed out, so the logo
+// on the sign-in screen works too.
+const enrollLink = /[#&]enroll=/.test(location.hash) ? location.hash : null;
+if (enrollLink) history.replaceState(null, '', location.pathname + location.search); // no code in the URL bar
+const openSetup = (link = null) =>
+  import('./enroll-ui.js').then((m) => m.openEnrollment($('#enroll'), link));
+for (const logo of [$('#brand'), $('.login__logo')]) onFiveTaps(logo, () => openSetup());
+if (enrollLink) openSetup(enrollLink);
 
 // --- Battery: do nothing while the app is not on screen -------------------------
 let labelTimer = 0;

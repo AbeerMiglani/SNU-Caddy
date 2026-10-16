@@ -44,14 +44,17 @@
         ".validate": "root.child('fleet').child($caddyId).exists() && newData.hasChildren(['lat', 'lng', 'accuracy', 'status', 'online', 'lastUpdated'])",
         // Positions must be on (or next to) campus. This also protects the
         // driver's privacy: the phone cannot publish a location off campus.
-        "lat": { ".validate": "newData.isNumber() && newData.val() >= 28.516 && newData.val() <= 28.536" },
-        "lng": { ".validate": "newData.isNumber() && newData.val() >= 77.563 && newData.val() <= 77.586" },
-        "bearing": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360" },
-        "accuracy": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20" },
+        // A GPS field (lat, lng, bearing, accuracy) may change only together
+        // with a new lastUpdated, so the 1-per-second limit below always applies.
+        "lat": { ".validate": "newData.isNumber() && newData.val() >= 28.516 && newData.val() <= 28.536 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
+        "lng": { ".validate": "newData.isNumber() && newData.val() >= 77.563 && newData.val() <= 77.586 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
+        "bearing": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
+        "accuracy": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
         "status": { ".validate": "newData.val() === 'open' || newData.val() === 'full'" },
         "online": { ".validate": "newData.isBoolean()" },
         // Server time only (ServerValue.TIMESTAMP), and at most one position
-        // write per second per caddy, so a faulty phone cannot flood students.
+        // write per second per caddy. Status taps (open / full) and online
+        // changes are human actions and are not rate-limited.
         "lastUpdated": {
           ".validate": "newData.isNumber() && newData.val() === now && (!data.exists() || newData.val() >= data.val() + 1000)"
         },
