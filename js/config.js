@@ -98,6 +98,25 @@ export const DEMO = {
   parkedMinutesAgo: 14,
 };
 
+/** Student / admin login: Google accounts on this domain only (enforced again in the database rules). */
+export const AUTH = {
+  domain: 'snu.edu.in',
+};
+
+/**
+ * Campus geofence for students (a usage policy; the data is protected by login).
+ * Location is checked on the phone only and never sent anywhere.
+ */
+export const GEOFENCE = {
+  /** Still "on campus" up to this far outside the fence (GPS error, gates, roadside stops). */
+  marginM: 100,
+  /** Accept a recent cached fix: no need to wake the GPS each time. */
+  maxAgeMs: 120_000,
+  timeoutMs: 15_000,
+  /** Check again while the app stays open on screen. */
+  recheckMs: 5 * 60_000,
+};
+
 /** "Near <landmark>" is shown only within this distance. */
 export const NEAR_LANDMARK_M = 120;
 

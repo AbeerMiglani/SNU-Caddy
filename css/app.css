@@ -214,6 +214,8 @@ button {
   letter-spacing: -0.01em;
   user-select: none;
   -webkit-user-select: none;
+  /* Fast repeated taps (hidden driver setup) must not zoom the page. */
+  touch-action: manipulation;
 }
 
 .brand__logo {
@@ -295,60 +297,37 @@ button {
   stroke: none;
 }
 
-#theme-btn .icon {
-  display: none;
-}
-
-:root[data-theme-mode='auto'] #theme-btn .icon--auto,
-:root[data-theme-mode='light'] #theme-btn .icon--light,
-:root[data-theme-mode='dark'] #theme-btn .icon--dark {
-  display: block;
-}
-
-.menu {
-  position: absolute;
-  top: 0;
-  right: 54px;
-  display: flex;
-  flex-direction: column;
-  min-width: 140px;
-  padding: 6px;
-  border: 1px solid var(--sheet-border);
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.menu button {
-  display: flex;
+/* Theme pill: icon + word; each tap cycles Auto -> Light -> Dark. */
+.theme-pill {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   height: 44px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 10px;
-  background: none;
-  font-size: 15px;
-  font-weight: 500;
-  text-align: left;
+  padding: 0 14px 0 11px;
+  border: 1px solid var(--sheet-border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
+  transition: transform 0.12s var(--ease);
 }
 
-.menu button:hover,
-.menu button:focus-visible {
-  background: var(--surface-2);
+.theme-pill:active {
+  transform: scale(0.96);
 }
 
-.menu button[aria-checked='true'] {
-  font-weight: 700;
+.theme-pill .icon {
+  display: none;
+  width: 20px;
+  height: 20px;
 }
 
-.menu button[aria-checked='true']::after {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--fg);
+:root[data-theme-mode='auto'] .theme-pill .icon--auto,
+:root[data-theme-mode='light'] .theme-pill .icon--light,
+:root[data-theme-mode='dark'] .theme-pill .icon--dark {
+  display: block;
 }
 
 /* ---------------------------------------------------------- Bottom sheet -- */
@@ -685,6 +664,246 @@ button {
   transform: scale(0.99);
 }
 
+/* ------------------------------------------------- Phase 2: gate + login -- */
+
+/* While the location card shows, it replaces the list. */
+.sheet.is-gated .list,
+.sheet.is-gated .empty {
+  display: none !important;
+}
+
+.gate {
+  padding: 4px 12px 8px;
+}
+
+.gate__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.gate__text {
+  margin: 4px 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.gate[data-kind='checking'] .gate__text {
+  margin-bottom: 4px;
+}
+
+.account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 12px 12px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.account span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.link-btn {
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.btn--ghost {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--fg);
+}
+
+/* Full-screen sign-in, Uber style. Covers the map until the student signs in. */
+.login {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.login__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+}
+
+.login__logo {
+  width: 72px;
+  height: 72px;
+  fill: var(--fg);
+  touch-action: manipulation; /* fast taps open the hidden driver setup */
+}
+
+.login__ready {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  margin-top: 28px;
+}
+
+.login[data-state='loading'] .login__ready {
+  display: none;
+}
+
+.login__title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.login__text {
+  margin: 10px 0 28px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.login__note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.login__error {
+  min-height: 1.4em;
+  margin: 12px 0;
+  color: var(--status-full);
+  font-size: 14px;
+}
+
+/* Hidden driver-phone setup dialog. */
+.enroll {
+  width: min(100% - 24px, 420px);
+  max-height: calc(100% - 24px);
+  padding: 0;
+  border: 1px solid var(--sheet-border);
+  border-radius: 24px;
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+}
+
+.enroll::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.enroll__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 20px 20px;
+}
+
+.enroll__title {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.enroll__text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.enroll__scan {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border-radius: 16px;
+  background: #000000;
+}
+
+.enroll__scan video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.enroll__frame {
+  position: absolute;
+  inset: 18%;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  border-radius: 18px;
+}
+
+.enroll__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.enroll__field input {
+  height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 15px;
+  letter-spacing: 0.03em;
+}
+
+.enroll__status {
+  min-height: 1.4em;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.enroll__status[data-state='error'] {
+  color: var(--status-full);
+}
+
+.enroll__status[data-state='ok'] {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.enroll__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 /* ----------------------------------------------------------- Caddy icons -- */
 
 .caddy-marker {
@@ -785,6 +1004,22 @@ button {
 @media (max-width: 380px) {
   .brand__name {
     font-size: 14px;
+  }
+
+  .theme-pill {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* Icon only on small phones; the word stays for screen readers. */
+  .theme-pill__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
   .sheet__header {

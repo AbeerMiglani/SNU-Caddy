@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>SNU Caddy · Driver</title>
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="assets/icon-192.png" />
+    <script>
+      // Not a linked phone? Go to the student app.
+      try {
+        if (!localStorage.getItem('snucaddy.driver')) location.replace('./');
+      } catch (e) {
+        location.replace('./');
+      }
+    </script>
+    <link
+      rel="preload"
+      href="assets/fonts/inter-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="css/driver.css" />
+  </head>
+  <body>
+    <!-- OLED driver screen: pure black, no map, minimal dim text. -->
+    <main class="driver">
+      <header class="driver__top">
+        <span class="driver__app">SNU Caddy · Driver</span>
+      </header>
+
+      <section class="driver__center">
+        <p class="driver__label">This phone drives</p>
+        <h1 class="driver__name" id="driver-name">…</h1>
+        <p class="driver__status" id="driver-status" role="status" data-state="checking">
+          Checking link…
+        </p>
+      </section>
+
+      <footer class="driver__bottom">
+        <button class="driver__go" type="button" disabled aria-describedby="driver-status">
+          GO
+        </button>
+      </footer>
+    </main>
+
+    <script type="module">
+      import { readBinding, verifyLink } from './js/driver.js';
+
+      const binding = readBinding();
+      if (!binding) {
+        location.replace('./');
+      } else {
+        verifyLink(
+          binding,
+          {
+            name: document.getElementById('driver-name'),
+            status: document.getElementById('driver-status'),
+          },
+          () => location.replace('./'),
+        );
+      }
+    </script>
+  </body>
+</html>

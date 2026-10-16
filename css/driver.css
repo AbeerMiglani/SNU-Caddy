@@ -1,0 +1,113 @@
+/* Driver screen: OLED pitch black. Pure #000 background so OLED pixels stay off;
+   only small, dim text and one big control are lit. No map, no animation. */
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src:
+    url('../assets/fonts/inter-latin-wght-normal.woff2') format('woff2-variations'),
+    url('../assets/fonts/inter-latin-wght-normal.woff2') format('woff2');
+}
+
+:root {
+  --black: #000000;
+  --dim: #8a8a8a; /* 6.0:1 on black: readable, but not bright */
+  --soft: #d9d9d9;
+  --go: #06c167;
+  --danger: #ff5a4f;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--black);
+  color: var(--soft);
+  font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid #276ef1;
+  outline-offset: 3px;
+}
+
+.driver {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100%;
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 24px
+    calc(env(safe-area-inset-bottom, 0px) + 24px);
+}
+
+.driver__app {
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+.driver__center {
+  align-self: center;
+  text-align: center;
+}
+
+.driver__label {
+  margin: 0;
+  color: var(--dim);
+  font-size: 15px;
+}
+
+.driver__name {
+  margin: 6px 0 12px;
+  color: var(--soft);
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.driver__status {
+  margin: 0 auto;
+  max-width: 30ch;
+  color: var(--dim);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.driver__status[data-state='error'] {
+  color: var(--danger);
+}
+
+.driver__bottom {
+  display: grid;
+  place-items: center;
+}
+
+/* The giant Uber-style GO button (active in Phase 3). */
+.driver__go {
+  width: min(64vw, 240px);
+  aspect-ratio: 1;
+  border: 3px solid #1f1f1f;
+  border-radius: 50%;
+  background: var(--black);
+  color: #3a3a3a;
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}

@@ -14,6 +14,15 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
 
+    <!-- A linked driver phone opens the OLED driver screen at once (no map, no tiles). -->
+    <script>
+      try {
+        if (localStorage.getItem('snucaddy.driver') && !/enroll=/.test(location.hash)) {
+          location.replace('driver.html');
+        }
+      } catch (e) {}
+    </script>
+
     <!-- Set the theme before first paint, so dark-mode users never see a white flash. -->
     <script>
       (function () {
@@ -65,15 +74,8 @@
       </div>
 
       <div class="fabs">
-        <button
-          class="fab"
-          id="theme-btn"
-          type="button"
-          aria-haspopup="true"
-          aria-expanded="false"
-          aria-controls="theme-menu"
-          aria-label="Map theme"
-        >
+        <!-- Theme pill: each tap cycles Auto -> Light (Positron) -> Dark (Dark Matter). -->
+        <button class="theme-pill" id="theme-btn" type="button">
           <svg class="icon icon--auto" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="8" />
             <path d="M12 4a8 8 0 0 1 0 16z" class="fill" />
@@ -87,18 +89,9 @@
           <svg class="icon icon--dark" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
           </svg>
+          <span class="sr-only">Map theme: </span>
+          <span class="theme-pill__label" id="theme-label">Auto</span>
         </button>
-        <div class="menu" id="theme-menu" role="menu" aria-label="Map theme" hidden>
-          <button type="button" role="menuitemradio" data-mode="auto" aria-checked="false">
-            Auto
-          </button>
-          <button type="button" role="menuitemradio" data-mode="light" aria-checked="false">
-            Light
-          </button>
-          <button type="button" role="menuitemradio" data-mode="dark" aria-checked="false">
-            Dark
-          </button>
-        </div>
         <button class="fab" id="recenter-btn" type="button" aria-label="Show the whole campus">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -132,6 +125,12 @@
         </button>
       </div>
       <div class="sheet__body" id="sheet-body">
+        <!-- Geofence / location card (Phase 2). Replaces the list while shown. -->
+        <div class="gate" id="gate" hidden>
+          <p class="gate__title" id="gate-title"></p>
+          <p class="gate__text" id="gate-text"></p>
+          <button class="btn btn--primary" id="gate-action" type="button"></button>
+        </div>
         <ul class="list" id="caddy-list" hidden></ul>
         <div class="empty" id="empty">
           <div class="empty__icon" aria-hidden="true">
@@ -144,8 +143,64 @@
           <p class="empty__text">Caddies show up here live when a driver taps GO.</p>
           <button class="btn btn--primary" id="empty-demo" type="button">Start demo</button>
         </div>
+        <p class="account" id="account" hidden>
+          <span id="account-email"></span>
+          <button class="link-btn" id="sign-out" type="button">Sign out</button>
+        </p>
       </div>
     </section>
+
+    <!-- Sign-in (Phase 2). Shows a plain splash until Firebase knows the session. -->
+    <section class="login" id="login" data-state="loading" aria-labelledby="login-title" hidden>
+      <div class="login__inner">
+        <svg class="login__logo" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="9" />
+          <rect class="brand__cart" x="10.5" y="6" width="11" height="20" rx="4" />
+          <rect class="brand__roof" x="12" y="12" width="8" height="10" rx="2" />
+        </svg>
+        <div class="login__ready">
+          <h2 class="login__title" id="login-title">Campus caddies, live.</h2>
+          <p class="login__text">See every SNU caddy on the map, with open seats, as it moves.</p>
+          <button class="btn btn--primary" id="login-btn" type="button">
+            Continue with SNU Google account
+          </button>
+          <p class="login__note">Only @snu.edu.in accounts. No Google Play Services needed.</p>
+          <p class="login__error" id="login-error" role="alert"></p>
+          <button class="btn btn--ghost" id="login-demo" type="button">Try the demo</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hidden driver-phone setup: 5 quick taps on the logo (Phase 2). -->
+    <dialog class="enroll" id="enroll" aria-labelledby="enroll-title">
+      <form class="enroll__inner" id="enroll-form" novalidate>
+        <h2 class="enroll__title" id="enroll-title">Set up a driver phone</h2>
+        <p class="enroll__text">
+          For SNU Caddy admins. Scan the setup QR from the admin page, or type the setup code.
+        </p>
+        <div class="enroll__scan" id="enroll-scan" hidden>
+          <video id="enroll-video" muted playsinline></video>
+          <span class="enroll__frame" aria-hidden="true"></span>
+        </div>
+        <button class="btn btn--primary" id="enroll-scan-btn" type="button">Scan QR code</button>
+        <label class="enroll__field">
+          <span>Setup code</span>
+          <input
+            id="enroll-code"
+            type="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+          />
+        </label>
+        <p class="enroll__status" id="enroll-status" role="status"></p>
+        <div class="enroll__actions">
+          <button class="btn btn--ghost" id="enroll-cancel" type="button">Cancel</button>
+          <button class="btn btn--primary" id="enroll-link" type="submit">Link this phone</button>
+        </div>
+      </form>
+    </dialog>
 
     <noscript><p class="noscript">SNU Caddy needs JavaScript to show the live map.</p></noscript>
 

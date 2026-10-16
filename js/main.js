@@ -1,11 +1,15 @@
-// Student map: wires the theme, map, caddy icons, bottom sheet and demo mode.
+// Student app: wires the theme, map, caddy icons, bottom sheet, demo mode,
+// and (Phase 2) the SNU login + campus geofence gate and driver-phone setup.
 
 import { CaddyLayer } from './caddy-layer.js';
 import { createCaddyList } from './caddy-list.js';
 import { DemoSimulator } from './demo.js';
+import { setupEnrollment } from './enroll-ui.js';
+import { FIREBASE_ON } from './firebase.js';
 import { createMap } from './map.js';
 import { createSheet } from './sheet.js';
-import { bindThemeMenu, createTheme } from './theme.js';
+import { createStudentGate } from './student-gate.js';
+import { bindThemePill, createTheme } from './theme.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LABEL_REFRESH_MS = 5_000;
@@ -15,7 +19,7 @@ const RENDER_DELAY_MS = 400;
 let mapApi = null;
 const theme = createTheme({ onChange: (resolved) => mapApi?.setTheme(resolved) });
 mapApi = createMap($('#map'), theme.resolved);
-bindThemeMenu(theme, $('#theme-btn'), $('#theme-menu'));
+bindThemePill(theme, $('#theme-btn'), $('#theme-label'));
 
 // --- Caddy state ----------------------------------------------------------------
 /** Every caddy we know about: id -> record. Phase 4 fills this from Firebase. */
@@ -75,6 +79,35 @@ function clearSelection() {
 mapApi.map.on('click', clearSelection);
 $('#recenter-btn').addEventListener('click', () => mapApi.fitCampus(sheet.cover()));
 
+// --- Phase 2: SNU login + campus geofence -----------------------------------------
+// Without a Firebase project the app stays in Phase 1 mode (map + demo, no login).
+const gate = FIREBASE_ON
+  ? createStudentGate(
+      {
+        login: $('#login'),
+        loginButton: $('#login-btn'),
+        loginError: $('#login-error'),
+        card: $('#gate'),
+        cardTitle: $('#gate-title'),
+        cardText: $('#gate-text'),
+        cardAction: $('#gate-action'),
+        account: $('#account'),
+        accountEmail: $('#account-email'),
+        signOut: $('#sign-out'),
+      },
+      {
+        // Phase 4 attaches / detaches the live `caddies` listener here.
+        onLive: (on) => {
+          document.documentElement.dataset.live = String(on);
+        },
+        onChange: () => {
+          $('#sheet').classList.toggle('is-gated', !$('#gate').hidden);
+          sheet.refresh();
+        },
+      },
+    )
+  : null;
+
 // --- Demo / pitch mode ----------------------------------------------------------
 const params = new URLSearchParams(location.search);
 const demoSwitch = $('#demo-switch');
@@ -89,11 +122,17 @@ function setDemo(on) {
   else demo.stop();
   demoSwitch.setAttribute('aria-checked', String(on));
   $('#demo-banner').hidden = !on;
+  gate?.setDemo(on);
   renderNow();
 }
 
 demoSwitch.addEventListener('click', () => setDemo(!demo.running));
 $('#empty-demo').addEventListener('click', () => setDemo(true));
+$('#login-demo').addEventListener('click', () => setDemo(true));
+
+// Hidden driver-phone setup: 5 quick taps on a logo, or a #enroll= link. A new
+// driver phone is signed out, so the logo on the sign-in screen works too.
+setupEnrollment([$('#brand'), $('.login__logo')], $('#enroll'));
 
 // --- Battery: do nothing while the app is not on screen -------------------------
 let labelTimer = 0;

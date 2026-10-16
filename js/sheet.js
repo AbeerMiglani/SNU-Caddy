@@ -30,10 +30,10 @@ export function createSheet(sheet, { onChange } = {}) {
     gapPx = parseFloat(getComputedStyle(sheet).bottom) || 0;
     // Full: leave the top bar (brand + buttons) visible above the sheet.
     const full = Math.max(240, vh - gapPx - 84);
-    // Peek shows the header plus the first caddy row (or the whole empty-state card).
-    const firstRow = body.querySelector('.row, .empty:not([hidden])');
+    // Peek shows the header plus the first caddy row (or the whole location / empty card).
+    const firstRow = body.querySelector('.gate:not([hidden]), .row, .empty:not([hidden])');
     let rowPart = 72;
-    if (firstRow?.classList.contains('empty')) rowPart = firstRow.offsetHeight + 8;
+    if (firstRow && !firstRow.classList.contains('row')) rowPart = firstRow.offsetHeight + 8;
     else if (firstRow) rowPart = Math.min(firstRow.offsetHeight, 132) + 12;
     const peek = Math.min(full, body.offsetTop + rowPart);
     const half = Math.min(full, Math.max(peek + 80, Math.round(vh * 0.5)));

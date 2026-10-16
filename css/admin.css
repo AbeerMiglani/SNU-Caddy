@@ -1,0 +1,283 @@
+/* Admin dashboard. Uses the tokens and buttons from app.css. */
+
+body.admin {
+  overflow: auto;
+  min-height: 100%;
+  height: auto;
+  background: var(--surface-2);
+}
+
+:root[data-theme='dark'] body.admin {
+  background: var(--bg);
+}
+
+.admin-top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(var(--safe-top) + 12px) 16px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-top .brand {
+  box-shadow: none;
+  border: 0;
+  padding-left: 0;
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.who__email {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.admin-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.admin-grid {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 900px) {
+  .admin-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-grid > :first-child {
+    grid-row: span 2;
+  }
+}
+
+.card {
+  padding: 20px;
+  border: 1px solid var(--sheet-border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.card h1,
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.hint {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.error {
+  min-height: 1em;
+  margin: 10px 0 0;
+  color: var(--status-full);
+  font-size: 14px;
+}
+
+.steps {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.row-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.row-form .btn {
+  width: auto;
+  height: 44px;
+}
+
+.field {
+  display: flex;
+  flex: 1 1 160px;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.field--num {
+  flex: 0 0 84px;
+}
+
+.field input,
+.field select {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 500;
+}
+
+.btn--small {
+  width: auto;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 14px;
+}
+
+.btn--danger {
+  border-color: var(--status-full);
+  color: var(--status-full);
+}
+
+.btn:not(.btn--primary):not(.btn--small) {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.uid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.uid code {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 14px;
+  word-break: break-all;
+}
+
+/* QR: always black on white so every scanner can read it. */
+.code-box {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.code-qr {
+  width: min(100%, 300px);
+  margin: 0 auto;
+  padding: 8px;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.code-qr:empty {
+  display: none;
+}
+
+.code-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.code-qr svg path,
+.code-qr svg rect {
+  shape-rendering: crispEdges;
+}
+
+.code-text {
+  margin: 12px 0 4px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.code-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.code-box[data-state='used'] .code-meta {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th,
+.table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table td:last-child {
+  text-align: right;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.fleet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.fleet li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.fleet__id {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}

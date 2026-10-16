@@ -1,9 +1,10 @@
 // Theme: 'auto' follows the phone setting; 'light' and 'dark' are manual choices.
 // The inline script in index.html sets data-theme before first paint (no flash);
-// this module keeps it in sync afterwards and owns the floating theme menu.
+// this module keeps it in sync afterwards and owns the floating theme pill.
 
 const STORAGE_KEY = 'snucaddy.theme';
 const MODES = ['auto', 'light', 'dark'];
+const NAMES = { auto: 'Auto', light: 'Light', dark: 'Dark' };
 const BAR_COLOR = { light: '#ffffff', dark: '#000000' };
 
 function readMode() {
@@ -66,58 +67,17 @@ export function createTheme({ onChange }) {
 }
 
 /**
- * Wire the floating theme button and its small Auto / Light / Dark menu.
+ * The floating theme pill: each tap moves Auto -> Light -> Dark -> Auto.
+ * The pill shows the current mode as an icon and a word.
  * @param {ReturnType<typeof createTheme>} theme
  */
-export function bindThemeMenu(theme, button, menu) {
-  const items = [...menu.querySelectorAll('[data-mode]')];
-
-  function sync() {
-    for (const item of items) {
-      item.setAttribute('aria-checked', String(item.dataset.mode === theme.mode));
-    }
-    const label = { auto: 'Auto', light: 'Light', dark: 'Dark' }[theme.mode];
-    button.setAttribute('aria-label', `Map theme: ${label}`);
-  }
-
-  function open() {
-    menu.hidden = false;
-    button.setAttribute('aria-expanded', 'true');
-    (items.find((i) => i.dataset.mode === theme.mode) ?? items[0]).focus();
-    document.addEventListener('pointerdown', onOutside, true);
-    document.addEventListener('keydown', onKey);
-  }
-
-  function close({ refocus = false } = {}) {
-    menu.hidden = true;
-    button.setAttribute('aria-expanded', 'false');
-    document.removeEventListener('pointerdown', onOutside, true);
-    document.removeEventListener('keydown', onKey);
-    if (refocus) button.focus();
-  }
-
-  function onOutside(e) {
-    if (!menu.contains(e.target) && !button.contains(e.target)) close();
-  }
-
-  function onKey(e) {
-    if (e.key === 'Escape') {
-      close({ refocus: true });
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      const step = e.key === 'ArrowDown' ? 1 : -1;
-      const at = items.indexOf(document.activeElement);
-      items[(at + step + items.length) % items.length].focus();
-    }
-  }
-
-  button.addEventListener('click', () => (menu.hidden ? open() : close()));
-  for (const item of items) {
-    item.addEventListener('click', () => {
-      theme.set(item.dataset.mode);
-      sync();
-      close({ refocus: true });
-    });
-  }
+export function bindThemePill(theme, button, label) {
+  const sync = () => {
+    label.textContent = NAMES[theme.mode];
+  };
+  button.addEventListener('click', () => {
+    theme.set(MODES[(MODES.indexOf(theme.mode) + 1) % MODES.length]);
+    sync();
+  });
   sync();
 }

@@ -1,0 +1,101 @@
+{
+  // SNU Caddy: Firebase Realtime Database security rules.
+  // Model (see docs/ARCHITECTURE.md):
+  //   admins/{uid}        true        set by hand in the Firebase console
+  //   fleet/{caddyId}     {name}      list of real caddies, edited by admins
+  //   caddies/{caddyId}   live state  ONE object per caddy, overwritten (no history)
+  //   drivers/{uid}       binding     anonymous driver phone -> caddyId
+  //   enrollCodes/{code}  one-time    QR / typed setup codes, 10 min life
+  // Everything not listed below is denied.
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "admins": {
+      "$uid": {
+        // An admin can check that they are an admin. Nobody can list or edit
+        // this node from the app; the project owner edits it in the console.
+        ".read": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "fleet": {
+      // Students and admins: verified @snu.edu.in Google accounts.
+      ".read": "auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i)",
+      "$caddyId": {
+        // A bound driver phone may read its own caddy's name.
+        ".read": "auth != null && root.child('drivers').child(auth.uid).child('caddyId').val() === $caddyId",
+        ".write": "auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i) && root.child('admins').child(auth.uid).val() === true",
+        ".validate": "$caddyId.matches(/^caddy_[0-9]{2}$/) && newData.hasChildren(['name'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+        },
+        "$other": { ".validate": false }
+      }
+    },
+
+    "caddies": {
+      // Strict read/write isolation: students only read ...
+      ".read": "auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i)",
+      "$caddyId": {
+        // ... and only the phone bound to THIS caddy writes it. Admins may
+        // force a caddy offline or delete its state.
+        ".write": "(auth != null && newData.exists() && root.child('drivers').child(auth.uid).child('caddyId').val() === $caddyId) || (auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i) && root.child('admins').child(auth.uid).val() === true)",
+        ".validate": "root.child('fleet').child($caddyId).exists() && newData.hasChildren(['lat', 'lng', 'accuracy', 'status', 'online', 'lastUpdated'])",
+        // Positions must be on (or next to) campus. This also protects the
+        // driver's privacy: the phone cannot publish a location off campus.
+        "lat": { ".validate": "newData.isNumber() && newData.val() >= 28.516 && newData.val() <= 28.536" },
+        "lng": { ".validate": "newData.isNumber() && newData.val() >= 77.563 && newData.val() <= 77.586" },
+        "bearing": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360" },
+        "accuracy": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20" },
+        "status": { ".validate": "newData.val() === 'open' || newData.val() === 'full'" },
+        "online": { ".validate": "newData.isBoolean()" },
+        // Server time only (ServerValue.TIMESTAMP), and at most one position
+        // write per second per caddy, so a faulty phone cannot flood students.
+        "lastUpdated": {
+          ".validate": "newData.isNumber() && newData.val() === now && (!data.exists() || newData.val() >= data.val() + 1000)"
+        },
+        "$other": { ".validate": false }
+      }
+    },
+
+    "drivers": {
+      ".read": "auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i) && root.child('admins').child(auth.uid).val() === true",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        // Enroll: the phone writes its own binding in the SAME update that
+        // marks a valid, unused, unexpired setup code as used by this phone.
+        // Revoke: an admin deletes the binding.
+        ".write": "(auth != null && auth.uid === $uid && newData.exists() && root.child('enrollCodes').child(newData.child('code').val()).exists() && root.child('enrollCodes').child(newData.child('code').val()).child('caddyId').val() === newData.child('caddyId').val() && root.child('enrollCodes').child(newData.child('code').val()).child('expiresAt').val() > now && !root.child('enrollCodes').child(newData.child('code').val()).child('usedBy').exists() && newData.parent().parent().child('enrollCodes').child(newData.child('code').val()).child('usedBy').val() === auth.uid) || (!newData.exists() && auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i) && root.child('admins').child(auth.uid).val() === true)",
+        ".validate": "newData.hasChildren(['caddyId', 'code', 'enrolledAt'])",
+        "caddyId": { ".validate": "newData.isString() && root.child('fleet').child(newData.val()).exists()" },
+        "code": { ".validate": "newData.isString()" },
+        "enrolledAt": { ".validate": "newData.val() === now" },
+        "device": { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "$other": { ".validate": false }
+      }
+    },
+
+    "enrollCodes": {
+      // Admins list codes on the dashboard.
+      ".read": "auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i) && root.child('admins').child(auth.uid).val() === true",
+      "$code": {
+        // Whoever holds the exact 120-bit code may look it up. The parent
+        // cannot be listed, so codes cannot be found by guessing.
+        ".read": "auth != null",
+        // Admins create and delete codes. A phone may only claim one: set
+        // usedBy to itself, once, before expiry, together with its binding.
+        ".write": "(auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i) && root.child('admins').child(auth.uid).val() === true) || (auth != null && data.exists() && !data.child('usedBy').exists() && data.child('expiresAt').val() > now && newData.child('usedBy').val() === auth.uid && newData.child('caddyId').val() === data.child('caddyId').val() && newData.child('expiresAt').val() === data.child('expiresAt').val() && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('createdBy').val() === data.child('createdBy').val() && newData.parent().parent().child('drivers').child(auth.uid).child('code').val() === $code)",
+        ".validate": "$code.matches(/^[0-9A-HJKMNP-TV-Z]{24}$/) && newData.hasChildren(['caddyId', 'createdAt', 'createdBy', 'expiresAt'])",
+        "caddyId": { ".validate": "newData.isString() && root.child('fleet').child(newData.val()).exists()" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "createdBy": { ".validate": "newData.isString()" },
+        // A code lives at most 30 minutes (the dashboard uses 10).
+        "expiresAt": { ".validate": "newData.isNumber() && newData.val() <= now + 1800000" },
+        "usedBy": { ".validate": "newData.isString()" },
+        "usedAt": { ".validate": "newData.val() === now" },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}
