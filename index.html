@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>SNU Caddy</title>
+    <meta name="description" content="Live caddy tracker for the Shiv Nadar University campus." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="SNU Caddy" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="assets/icon-192.png" />
+
+    <!-- Set the theme before first paint, so dark-mode users never see a white flash. -->
+    <script>
+      (function () {
+        var mode = 'auto';
+        try {
+          mode = localStorage.getItem('snucaddy.theme') || 'auto';
+        } catch (e) {}
+        if (mode !== 'light' && mode !== 'dark') mode = 'auto';
+        var dark =
+          mode === 'dark' ||
+          (mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        document.documentElement.dataset.themeMode = mode;
+        document.querySelector('meta[name="theme-color"]').content = dark ? '#000000' : '#ffffff';
+      })();
+    </script>
+
+    <link
+      rel="preload"
+      href="assets/fonts/inter-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="css/app.css" />
+  </head>
+  <body>
+    <div id="map" role="region" aria-label="Campus map"></div>
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="brand" id="brand">
+        <svg class="brand__logo" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="9" />
+          <rect class="brand__cart" x="10.5" y="6" width="11" height="20" rx="4" />
+          <rect class="brand__roof" x="12" y="12" width="8" height="10" rx="2" />
+        </svg>
+        <span class="brand__name">SNU Caddy</span>
+      </div>
+
+      <div class="demo-banner" id="demo-banner" hidden>
+        <span class="demo-banner__dot" aria-hidden="true"></span>Demo
+      </div>
+
+      <div class="fabs">
+        <button
+          class="fab"
+          id="theme-btn"
+          type="button"
+          aria-haspopup="true"
+          aria-expanded="false"
+          aria-controls="theme-menu"
+          aria-label="Map theme"
+        >
+          <svg class="icon icon--auto" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" />
+            <path d="M12 4a8 8 0 0 1 0 16z" class="fill" />
+          </svg>
+          <svg class="icon icon--light" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" />
+            <path
+              d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+            />
+          </svg>
+          <svg class="icon icon--dark" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+          </svg>
+        </button>
+        <div class="menu" id="theme-menu" role="menu" aria-label="Map theme" hidden>
+          <button type="button" role="menuitemradio" data-mode="auto" aria-checked="false">
+            Auto
+          </button>
+          <button type="button" role="menuitemradio" data-mode="light" aria-checked="false">
+            Light
+          </button>
+          <button type="button" role="menuitemradio" data-mode="dark" aria-checked="false">
+            Dark
+          </button>
+        </div>
+        <button class="fab" id="recenter-btn" type="button" aria-label="Show the whole campus">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"
+            />
+            <circle cx="12" cy="12" r="2.5" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Bottom sheet (side panel on wide screens) -->
+    <section class="sheet" id="sheet" aria-labelledby="sheet-title">
+      <button
+        class="sheet__grab"
+        type="button"
+        aria-expanded="false"
+        aria-controls="sheet-body"
+        aria-label="Expand caddy list"
+      >
+        <span class="sheet__handle" aria-hidden="true"></span>
+      </button>
+      <div class="sheet__header">
+        <div>
+          <h1 class="sheet__title" id="sheet-title">Campus caddies</h1>
+          <p class="sheet__summary" id="summary" aria-live="polite">No caddies on shift</p>
+        </div>
+        <button class="switch" id="demo-switch" type="button" role="switch" aria-checked="false">
+          <span class="switch__label">Demo</span>
+          <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+        </button>
+      </div>
+      <div class="sheet__body" id="sheet-body">
+        <ul class="list" id="caddy-list" hidden></ul>
+        <div class="empty" id="empty">
+          <div class="empty__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 36">
+              <rect x="3.5" y="2" width="17" height="32" rx="6" />
+              <rect class="empty__roof" x="5.5" y="12.5" width="13" height="17" rx="3" />
+            </svg>
+          </div>
+          <p class="empty__title">No caddies on shift right now</p>
+          <p class="empty__text">Caddies show up here live when a driver taps GO.</p>
+          <button class="btn btn--primary" id="empty-demo" type="button">Start demo</button>
+        </div>
+      </div>
+    </section>
+
+    <noscript><p class="noscript">SNU Caddy needs JavaScript to show the live map.</p></noscript>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>

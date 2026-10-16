@@ -1,0 +1,19 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# Node (if tooling is added later)
+node_modules/
+
+# Raw OpenStreetMap downloads (tools/build_campus_data.py --osm-file ...)
+*.osm
+
+# Local secrets (Firebase keys etc. in later phases)
+.env
+.env.*
