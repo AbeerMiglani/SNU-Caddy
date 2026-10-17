@@ -5,9 +5,9 @@ It is a mobile web app (PWA): plain HTML, CSS and JavaScript, with no build step
 
 | Phase | What | Status |
 | ----- | ---- | ------ |
-| 1 | Full-screen campus map, bottom sheet, theme pill (Auto / Light / Dark), demo / pitch mode | Done |
+| 1 | Full-screen campus map, bottom sheet, theme button (Auto / Light / Dark), demo / pitch mode | Done |
 | 2 | Firebase project, `@snu.edu.in` Google login, campus geofence, QR driver-phone binding, admin dashboard, security rules + tests | Done |
-| 3 | OLED-black driver screen: GO → Online & broadcasting → Go offline, GPS throttling, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
+| 3 | OLED-black driver screen: GO → Online → Go offline, GPS throttling, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
 | 4 | Live caddies on the student map (Moving / Parked / Signal lost / Offline), idle pause, service worker, strict CSP | Done |
 
 - **Live app:** <https://snu-caddy-45q9r.firebaseapp.com> (same site:
@@ -74,8 +74,8 @@ local IP address (for example `192.168.1.20`) and open
 | `driver.html` | A linked driver phone | Opens by itself on a linked phone |
 | `admin.html` | Admins | `…/admin.html` (SNU account on the admin list) |
 
-To link a driver phone: on the phone, tap the SNU Caddy logo **5 times
-quickly**, then scan the setup QR from the admin page.
+To link a driver phone: on the phone, tap the name **SNU Caddy** at the top
+**5 times quickly**, then scan the setup QR from the admin page.
 
 ## Driver screen (daily use)
 
@@ -83,8 +83,9 @@ A linked phone opens straight into the black driver screen. No login.
 
 1. Tap **GO**. The phone keeps its screen on and starts to share its
    location. The first time, Chrome asks for location: tap **Allow**.
-2. Drive. The screen stays black and says **Online & broadcasting**. The
-   driver taps nothing while driving.
+2. Drive. The screen stays black and says **Online** in green. The driver
+   taps nothing while driving. A problem shows as an amber or red headline
+   with one plain sentence (for example **No GPS signal**: Go to an open area).
 3. At the end of the shift, tap **Go offline** twice.
 
 What the phone sends: a position when the caddy moved 5 m, or every 30 s
@@ -135,8 +136,8 @@ updated, and one of four states:
 | **Offline** | The driver went offline, or the phone lost its connection |
 
 Live data runs only while the app is on screen, on campus and signed in.
-After 5 minutes without a touch it pauses ("Live updates paused · Tap to
-resume") and closes its database connection.
+After 5 minutes without a touch it pauses ("Live updates paused. Tap to
+resume.") and closes its database connection.
 
 Each virtual caddy acts like a real driver phone. It makes one GPS fix per
 second with a small error, and sometimes a blurry fix (> 20 m). The same
@@ -193,7 +194,7 @@ js/
   enroll.js             setup codes, QR scanner, atomic enrollment
   enroll-ui.js          hidden 5-tap setup dialog
   driver.js             driver binding (stored on the phone)
-  driver-screen.js      driver screen: GO, Online & broadcasting, Go offline, revoke check
+  driver-screen.js      driver screen: GO, Online, Go offline, revoke check
   driver-shift.js       shift engine: GPS filter, rate limit, onDisconnect, recovery
   admin.js              admin dashboard
   map.js                Leaflet map, campus lock, tile cross-fade
@@ -202,7 +203,7 @@ js/
   caddy-state.js        Moving / Parked / Signal lost / Offline
   live.js               live caddies from Firebase; closes the connection when idle
   sheet.js              bottom sheet drag / snap (side panel on laptops)
-  theme.js              Auto / Light / Dark pill
+  theme.js              Auto / Light / Dark theme button
   demo.js               demo simulator
   lib/geo.js            distance, bearing, small helpers
   lib/polygon.js        point-in-polygon, distance to the fence

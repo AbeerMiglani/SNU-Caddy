@@ -1,16 +1,14 @@
-/* Admin dashboard. Uses the tokens and buttons from app.css. */
+/* Admin page. Uses the tokens, buttons and wordmark from app.css.
+   No cards: a page of sections, separated by space and hairlines. */
 
 body.admin {
   overflow: auto;
   min-height: 100%;
   height: auto;
-  background: var(--surface-2);
-}
-
-:root[data-theme='dark'] body.admin {
   background: var(--bg);
 }
 
+/* --- Top bar ---------------------------------------------------------------- */
 .admin-top {
   position: sticky;
   top: 0;
@@ -18,73 +16,79 @@ body.admin {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: calc(var(--safe-top) + 12px) 16px 12px;
-  background: var(--surface);
+  gap: 16px;
+  height: calc(var(--bar-h) + var(--safe-top));
+  padding: var(--safe-top) calc(var(--safe-right) + 16px) 0 calc(var(--safe-left) + 16px);
   border-bottom: 1px solid var(--line);
+  background: var(--bg);
 }
 
-.admin-top .brand {
-  box-shadow: none;
-  border: 0;
-  padding-left: 0;
+.admin-top__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.admin-top__section {
+  color: var(--text-2);
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .who {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
 .who__email {
   overflow: hidden;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--text-2);
+  font-size: 14px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
+/* --- Page ------------------------------------------------------------------- */
 .admin-main {
-  max-width: 1100px;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 32px calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 64px)
+    calc(var(--safe-left) + 16px);
 }
 
-.admin-grid {
-  display: grid;
-  gap: 16px;
-}
-
-@media (min-width: 900px) {
-  .admin-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .admin-grid > :first-child {
-    grid-row: span 2;
-  }
-}
-
-.card {
-  padding: 20px;
-  border: 1px solid var(--sheet-border);
-  border-radius: 20px;
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.card h1,
-.card h2 {
+.page-title {
   margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 30px;
+  letter-spacing: -0.02em;
+}
+
+.panel .btn {
+  margin-top: 8px;
+}
+
+.section + .section {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+}
+
+.section__title {
+  margin: 0 0 16px;
   font-size: 20px;
+  font-weight: 700;
+  line-height: 26px;
   letter-spacing: -0.01em;
 }
 
 .hint {
-  margin: 0 0 12px;
-  color: var(--muted);
+  margin: 0 0 16px;
+  color: var(--text-2);
   font-size: 14px;
+  line-height: 20px;
 }
 
 .hint:empty {
@@ -92,61 +96,97 @@ body.admin {
 }
 
 .error {
-  min-height: 1em;
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   color: var(--error-text);
   font-size: 14px;
+  line-height: 20px;
+}
+
+.error:empty {
+  margin: 0;
 }
 
 .steps {
-  margin: 0 0 16px;
+  margin: 0 0 20px;
   padding-left: 20px;
-  color: var(--muted);
+  color: var(--text-2);
   font-size: 14px;
+  line-height: 22px;
 }
 
+.steps strong {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+/* --- Forms ------------------------------------------------------------------ */
 .row-form {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 10px;
+  gap: 12px;
 }
 
-.row-form .btn {
+.btn--auto {
   width: auto;
-  height: 44px;
+  min-width: 160px;
+}
+
+.btn--small {
+  width: auto;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.btn--danger {
+  color: var(--error-text);
 }
 
 .field {
   display: flex;
-  flex: 1 1 160px;
+  flex: 1 1 200px;
   flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  font-weight: 600;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
 }
 
 .field--num {
-  flex: 0 0 84px;
+  flex: 0 0 88px;
 }
 
 .field input,
 .field select {
-  height: 44px;
+  height: 48px;
   padding: 0 12px;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: var(--surface);
+  border-radius: 8px;
+  background: var(--bg);
   color: var(--fg);
   font: inherit;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.field input:focus-visible,
+.field select:focus-visible {
+  border-color: var(--fg);
+  outline: 2px solid var(--fg);
+  outline-offset: 0;
 }
 
 /* Own chevron: the browser's arrow sits too close to the border. */
 .field select {
   padding-right: 44px;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='square'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 16px center;
   background-size: 12px 8px;
@@ -154,55 +194,65 @@ body.admin {
 }
 
 :root[data-theme='dark'] .field select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='square'/%3E%3C/svg%3E");
 }
 
-.btn--small {
-  width: auto;
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  color: var(--fg);
-  font-size: 14px;
-}
-
-.btn--danger {
-  border-color: var(--error-text);
-  color: var(--error-text);
-}
-
-.btn:not(.btn--primary):not(.btn--small) {
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-}
-
+/* --- User ID (not an admin yet) ------------------------------------------------ */
 .uid {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  margin: 0;
 }
 
 .uid code {
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: 8px;
-  background: var(--surface-2);
+  background: var(--fill);
   font-size: 14px;
   word-break: break-all;
 }
 
-/* QR: always black on white so every scanner can read it. */
+/* --- Caddies: flat rows --------------------------------------------------------- */
+.fleet {
+  margin: 0 0 20px;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.fleet:empty {
+  display: none;
+}
+
+.fleet li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  border-bottom: 1px solid var(--line);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.fleet__id {
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* --- Setup QR: black on white for every scanner --------------------------------- */
 .code-box {
-  margin-top: 16px;
-  text-align: center;
+  margin-top: 24px;
 }
 
 .code-qr {
-  width: min(100%, 300px);
-  margin: 0 auto;
-  padding: 8px;
-  border-radius: 16px;
+  width: min(100%, 280px);
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   background: #ffffff;
 }
 
@@ -222,24 +272,30 @@ body.admin {
 }
 
 .code-text {
-  margin: 12px 0 4px;
+  margin: 16px 0 4px;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.04em;
+}
+
+.code-text:empty {
+  display: none;
 }
 
 .code-meta {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-2);
   font-size: 14px;
+  line-height: 20px;
 }
 
 .code-box[data-state='used'] .code-meta {
   color: var(--fg);
-  font-weight: 600;
+  font-weight: 500;
 }
 
+/* --- Linked phones -------------------------------------------------------------- */
 .table-wrap {
   overflow-x: auto;
 }
@@ -248,62 +304,50 @@ body.admin {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  line-height: 20px;
 }
 
 .table th,
 .table td {
-  padding: 10px 8px;
+  padding: 12px 8px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: middle;
 }
 
-.table th {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.table th:first-child,
+.table td:first-child {
+  padding-left: 0;
 }
 
+.table th:last-child,
 .table td:last-child {
+  padding-right: 0;
   text-align: right;
 }
 
-.muted {
-  color: var(--muted);
-}
-
-.fleet {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 16px;
-  padding: 0;
-  list-style: none;
-}
-
-.fleet li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.fleet__id {
-  color: var(--muted);
-  font-size: 12px;
+.table th {
+  color: var(--text-2);
   font-weight: 500;
 }
 
-/* "No phones are linked yet." under the table: same inset as the cells,
-   with room below the header line. */
+.table td:first-child {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+/* "No phones are linked yet." under the table: room below the header line. */
 .table-empty {
   margin: 0;
-  padding: 16px 8px 4px;
+  padding: 16px 0 4px;
+}
+
+@media (max-width: 480px) {
+  .who__email {
+    display: none;
+  }
 }

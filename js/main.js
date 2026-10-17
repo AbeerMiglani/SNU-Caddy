@@ -12,7 +12,7 @@ import { createLive } from './live.js';
 import { createMap } from './map.js';
 import { createSheet } from './sheet.js';
 import { createStudentGate } from './student-gate.js';
-import { bindThemePill, createTheme } from './theme.js';
+import { bindThemeButton, createTheme } from './theme.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LABEL_REFRESH_MS = 5_000;
@@ -22,7 +22,7 @@ const RENDER_DELAY_MS = 400;
 let mapApi = null;
 const theme = createTheme({ onChange: (resolved) => mapApi?.setTheme(resolved) });
 mapApi = createMap($('#map'), theme.resolved);
-bindThemePill(theme, $('#theme-btn'), $('#theme-label'));
+bindThemeButton(theme, $('#theme-btn'), $('#theme-label'));
 
 // --- Caddy state ----------------------------------------------------------------
 /** Every caddy we know about: id -> record (from Firebase, or from the demo). */
@@ -60,7 +60,7 @@ function scheduleRender() {
 function renderNow() {
   clearTimeout(renderTimer);
   renderTimer = 0;
-  // Connecting, paused or refused: no "No caddies online right now" card.
+  // Connecting, paused or refused: no empty-state text.
   const noCard = liveStatus === 'connecting' || liveStatus === 'denied' || idlePaused;
   $('#sheet').classList.toggle('is-loading', noCard && !demo.running);
   if (list.render(caddies, selectedId, summaryNote())) sheet.refresh();
@@ -71,7 +71,7 @@ function summaryNote() {
   // While the location card shows, no live data is loaded.
   if ($('#sheet').classList.contains('is-gated')) return 'Live tracking paused';
   if (demo.running) return null;
-  if (idlePaused) return 'Paused to save battery · tap to resume';
+  if (idlePaused) return 'Paused to save battery';
   return (
     {
       connecting: 'Connecting…',
@@ -145,6 +145,7 @@ const gate = FIREBASE_ON
       {
         login: $('#login'),
         loginButton: $('#login-btn'),
+        loginTitle: $('#login-title'),
         loginError: $('#login-error'),
         card: $('#gate'),
         cardTitle: $('#gate-title'),
@@ -153,7 +154,8 @@ const gate = FIREBASE_ON
         account: $('#account'),
         accountEmail: $('#account-email'),
         signOut: $('#sign-out'),
-        behindLogin: [$('#map'), $('.topbar'), $('#sheet')],
+        // The top bar stays usable: theme, and 5 taps on the name for driver setup.
+        behindLogin: [$('#map'), $('#recenter-btn'), $('#sheet')],
       },
       {
         // Live data runs only while the gate allows it (see student-gate.js).
@@ -221,7 +223,7 @@ const enrollLink = /[#&]enroll=/.test(location.hash) ? location.hash : null;
 if (enrollLink) history.replaceState(null, '', location.pathname + location.search); // no code in the URL bar
 const openSetup = (link = null) =>
   import('./enroll-ui.js').then((m) => m.openEnrollment($('#enroll'), link));
-for (const logo of [$('#brand'), $('.login__logo')]) onFiveTaps(logo, () => openSetup());
+onFiveTaps($('#brand'), () => openSetup());
 if (enrollLink) openSetup(enrollLink);
 
 // --- Battery: do nothing while the app is not on screen -------------------------

@@ -39,65 +39,83 @@
   </head>
   <body class="admin">
     <header class="admin-top">
-      <div class="brand">
-        <svg class="brand__logo" viewBox="0 0 32 32" aria-hidden="true">
-          <rect width="32" height="32" rx="9" />
-          <rect class="brand__cart" x="10.5" y="6" width="11" height="20" rx="4" />
-          <rect class="brand__roof" x="12" y="12" width="8" height="10" rx="2" />
-        </svg>
-        <span class="brand__name">SNU Caddy Admin</span>
+      <div class="admin-top__brand">
+        <span class="wordmark">SNU Caddy</span>
+        <span class="admin-top__section">Admin</span>
       </div>
       <div class="who" id="who" hidden>
         <span class="who__email" id="who-email"></span>
-        <button class="btn btn--small" id="sign-out" type="button">Sign out</button>
+        <button class="btn btn--secondary btn--small" id="sign-out" type="button">Sign out</button>
       </div>
     </header>
 
     <main class="admin-main">
-      <section class="card" id="view-loading">
+      <section class="panel" id="view-loading">
         <p class="hint">Loading…</p>
       </section>
 
-      <section class="card" id="view-config" hidden>
-        <h1>Firebase is not set up yet</h1>
+      <section class="panel" id="view-config" hidden>
+        <h1 class="page-title">Firebase is not set up</h1>
         <p class="hint">
-          Follow <code>docs/FIREBASE_SETUP.md</code> and paste your config into
+          Follow <code>docs/FIREBASE_SETUP.md</code> and put your config in
           <code>js/firebase-config.js</code>. For a local test, run the emulators and open this page
           with <code>?emulator=1</code>.
         </p>
       </section>
 
-      <section class="card" id="view-offline" hidden>
-        <h1>Can’t reach SNU Caddy</h1>
+      <section class="panel" id="view-offline" hidden>
+        <h1 class="page-title">No connection</h1>
         <p class="hint">Check the internet connection, then reload this page.</p>
-        <button class="btn btn--primary" id="reload" type="button">Reload</button>
+        <button class="btn btn--primary btn--auto" id="reload" type="button">Reload</button>
       </section>
 
-      <section class="card" id="view-signin" hidden>
-        <h1>Admin sign-in</h1>
-        <p class="hint">Use your @snu.edu.in Google account.</p>
-        <button class="btn btn--primary" id="sign-in" type="button">Continue with Google</button>
+      <section class="panel" id="view-signin" hidden>
+        <h1 class="page-title">Sign in</h1>
+        <p class="hint">Use your @snu.edu.in Google account. Only admins can open this page.</p>
+        <button class="btn btn--primary btn--auto" id="sign-in" type="button">
+          Continue with Google
+        </button>
         <p class="error" id="signin-error" role="alert"></p>
       </section>
 
-      <section class="card" id="view-denied" hidden>
-        <h1>Not an admin yet</h1>
+      <section class="panel" id="view-denied" hidden>
+        <h1 class="page-title">You are not an admin</h1>
         <p class="hint">
-          You are signed in, but this account is not on the admin list. Ask the project owner to add
-          your user ID under <code>admins</code> in the Firebase console (Realtime Database → Data),
-          with the value <code>true</code>.
+          This account is not on the admin list. Send your user ID to the project owner. They add it
+          under <code>admins</code> in the Firebase console (Realtime Database → Data) with the
+          value <code>true</code>.
         </p>
         <p class="uid">
           <code id="my-uid"></code>
-          <button class="btn btn--small" id="copy-uid" type="button">Copy</button>
+          <button class="btn btn--secondary btn--small" id="copy-uid" type="button">Copy</button>
         </p>
       </section>
 
-      <div class="admin-grid" id="view-admin" hidden>
-        <section class="card" aria-labelledby="h-link">
-          <h2 id="h-link">Link a driver phone</h2>
+      <div class="sections" id="view-admin" hidden>
+        <section class="section" aria-labelledby="h-fleet">
+          <h2 class="section__title" id="h-fleet">Caddies</h2>
+          <ul class="fleet" id="fleet-list"></ul>
+          <p class="hint" id="fleet-empty">No caddies yet. Add the first one.</p>
+          <form class="row-form" id="fleet-form">
+            <label class="field field--num">
+              <span>Number</span>
+              <input id="fleet-num" type="number" min="1" max="99" required placeholder="1" />
+            </label>
+            <label class="field">
+              <span>Name</span>
+              <input id="fleet-name" type="text" maxlength="30" required placeholder="Caddy 01" />
+            </label>
+            <button class="btn btn--primary btn--auto" type="submit">Add caddy</button>
+          </form>
+          <p class="error" id="fleet-error" role="alert"></p>
+        </section>
+
+        <section class="section" aria-labelledby="h-link">
+          <h2 class="section__title" id="h-link">Link a driver phone</h2>
           <ol class="steps">
-            <li>On the driver phone, open SNU Caddy and tap the logo 5 times quickly.</li>
+            <li>
+              On the driver phone, open SNU Caddy and tap the name “SNU Caddy” 5 times quickly.
+            </li>
             <li>Tap <strong>Scan QR code</strong> and point the phone at the code below.</li>
           </ol>
           <form class="row-form" id="code-form">
@@ -105,7 +123,7 @@
               <span>Caddy</span>
               <select id="code-caddy" required></select>
             </label>
-            <button class="btn btn--primary" type="submit">Create setup QR</button>
+            <button class="btn btn--primary btn--auto" type="submit">Create setup QR</button>
           </form>
           <div class="code-box" id="code-box" hidden>
             <div class="code-qr" id="code-qr" role="img" aria-label="Setup QR code"></div>
@@ -116,8 +134,8 @@
           <p class="error" id="code-error" role="alert"></p>
         </section>
 
-        <section class="card" aria-labelledby="h-phones">
-          <h2 id="h-phones">Linked phones</h2>
+        <section class="section" aria-labelledby="h-phones">
+          <h2 class="section__title" id="h-phones">Linked phones</h2>
           <div class="table-wrap">
             <table class="table">
               <thead>
@@ -134,24 +152,6 @@
           <p class="hint table-empty" id="drivers-empty">No phones are linked yet.</p>
           <p class="hint" id="drivers-status" role="status"></p>
           <p class="error" id="drivers-error" role="alert"></p>
-        </section>
-
-        <section class="card" aria-labelledby="h-fleet">
-          <h2 id="h-fleet">Caddies</h2>
-          <ul class="fleet" id="fleet-list"></ul>
-          <p class="hint" id="fleet-empty">No caddies yet. Add the first one below.</p>
-          <form class="row-form" id="fleet-form">
-            <label class="field field--num">
-              <span>No.</span>
-              <input id="fleet-num" type="number" min="1" max="99" required />
-            </label>
-            <label class="field">
-              <span>Name</span>
-              <input id="fleet-name" type="text" maxlength="30" required placeholder="Caddy 01" />
-            </label>
-            <button class="btn" type="submit">Save caddy</button>
-          </form>
-          <p class="error" id="fleet-error" role="alert"></p>
         </section>
       </div>
     </main>

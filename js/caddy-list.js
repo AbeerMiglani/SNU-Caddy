@@ -54,11 +54,10 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
     btn.className = 'row';
     btn.addEventListener('click', () => onSelect(c.id));
 
+    // The state dot is beside the state word, so the icon has no badge.
     const icon = document.createElement('span');
     icon.className = 'row__icon';
-    const badge = document.createElement('span');
-    badge.className = 'caddy__badge';
-    icon.append(cartSvg(), badge);
+    icon.append(cartSvg());
 
     const main = document.createElement('span');
     main.className = 'row__main';
@@ -72,12 +71,12 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
     meta.className = 'row__meta';
     main.append(titleLine, meta);
 
-    const pill = document.createElement('span');
-    pill.className = 'pill';
+    const state = document.createElement('span');
+    state.className = 'row__state';
 
-    btn.append(icon, main, pill);
+    btn.append(icon, main, state);
     li.append(btn);
-    return { li, btn, name, line, meta, pill };
+    return { li, btn, name, line, meta, state };
   }
 
   /**
@@ -114,7 +113,7 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
       const when = timeAgo(c.ts, now);
       const age = { offline: `last seen ${when}`, lost: `last update ${when}` }[c.state];
       setText(row.meta, `${placeLabel(c)} · ${age ?? `updated ${when}`}`);
-      setText(row.pill, STATE_TEXT[c.state] ?? c.state);
+      setText(row.state, STATE_TEXT[c.state] ?? c.state);
       row.btn.dataset.state = c.state;
       row.btn.classList.toggle('is-selected', c.id === selectedId);
       row.btn.setAttribute('aria-current', String(c.id === selectedId));

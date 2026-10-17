@@ -66,7 +66,7 @@ sequenceDiagram
   participant Phone as Driver phone
   Admin->>DB: enrollCodes/{code} = {caddyId, expiresAt: +10 min}
   Note over Admin: Shows QR (link with #enroll=code) and typed code
-  Phone->>Phone: 5 taps on logo, scan QR (or camera app opens link)
+  Phone->>Phone: 5 taps on the name, scan QR (or camera app opens link)
   Phone->>Phone: Anonymous sign-in (uid = device identity)
   Phone->>DB: ONE atomic update:<br/>drivers/{uid} = {caddyId, code}<br/>enrollCodes/{code}/usedBy = uid
   DB-->>Phone: Rules accept only if the code exists, is unused,<br/>is not expired and matches the caddy
@@ -182,9 +182,9 @@ place of the last move. So GPS noise cannot make a parked caddy "move".
 | Admin revokes the phone | The `drivers/{uid}` listener fires: the shift stops at once, the phone returns to the student app. The admin page sets `online: false`. |
 | Writes refused (for example the caddy was removed from the fleet) | Back-off (2, 4, 8 … 30 s); after 3 in a row the screen says "Ask an admin". |
 
-The driver screen is OLED-black: a pure `#000` background, dim text and a
-still beacon (thin rings and a dot) whose colour follows the status: green
-"Online & broadcasting", amber for a warning, red for an error. It dims
+The driver screen is OLED-black: a pure `#000` background and little lit
+text. One large headline gives the status in colour (green "Online", amber
+for a warning, red for an error) with one plain sentence below it. It dims
 after 20 s without a touch (an error lights it again at once, a warning
 after 10 s) and moves its content by a few pixels every minute, so hours of
 a still picture cannot burn in.
@@ -295,11 +295,11 @@ but it needs a billing account. That is a decision for SNU IT.
 | Phone battery dies, app is killed | The server runs `onDisconnect`: `online: false`. |
 | Phone clock is wrong | All times are server time (`ServerValue.TIMESTAMP`); students use the server time offset for the 90 s and 60 s checks (tested with a phone clock 10 minutes fast). |
 | Student switches app or locks the phone | Page Visibility API: no GPS, no timers, database connection closed. |
-| Student leaves the app open on a desk | After 5 minutes without a touch, live updates pause and the connection closes. A chip says "Live updates paused · Tap to resume". |
+| Student leaves the app open on a desk | After 5 minutes without a touch, live updates pause and the connection closes. A bar says "Live updates paused. Tap to resume." |
 | Student opens the app in a dead zone | The service worker serves the app; the list says "Connecting…" until the database answers. |
 | Network blocks WebSockets | The Firebase SDK falls back to long polling (allowed by the CSP). |
-| Student is off campus | "You're outside campus—live tracking activates on campus grounds." No data is loaded. |
-| Student denies location | A clear card explains why location is needed and that it stays on the phone. No data is loaded. |
+| Student is off campus | "You're outside campus. Live tracking activates on campus grounds." No data is loaded. |
+| Student denies location | The sheet explains why location is needed and that it stays on the phone. No data is loaded. |
 | Site opened over plain `http://` | Location needs HTTPS; the app says so. |
 | Non-SNU Google account | The account is removed again, and the app asks for an `@snu.edu.in` account. |
 | Too many sign-ups from one network | Clear message; try again later or on mobile data. |
@@ -320,5 +320,24 @@ but it needs a billing account. That is a decision for SNU IT.
 | ----- | ----- | ------ |
 | 1 | Uber-style map, bottom sheet, theme (Auto/Light/Dark), demo/pitch mode | Done |
 | 2 | Firebase project, `@snu.edu.in` login, geofence, QR device binding, admin dashboard, security rules + tests | Done |
-| 3 | Driver screen: GO → Online & broadcasting → Go offline, GPS gate, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
+| 3 | Driver screen: GO → Online → Go offline, GPS gate, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
 | 4 | Live caddies on the student map (Moving / Parked / Signal lost / Offline), connection management with idle pause, service worker (offline app shell), strict CSP | Done |
+
+## 10. Design
+
+All three pages use one small system in a strict Uber style, so the product
+looks like the work of one team. The rules (`css/app.css` holds the tokens):
+
+| Part | Rule |
+| ---- | ---- |
+| Colour | Black and white first, one grey scale. Colour only where it means something: the state dots (Moving green, Parked blue, Signal lost amber, Offline grey), errors (red) and the driver GO (blue). |
+| Type | Inter, set tight. Sizes 32 / 24 / 18 / 16 / 14 / 12 px; weights 400, 500 and 700 only. Sentence case everywhere; no uppercase labels. |
+| Shape | 8 px corners on buttons, inputs and map buttons; 12 px only on the top of the bottom sheet. No pills and no cards: sections are separated by space and hairlines. |
+| Depth | One crisp shadow, only for things that float over the map. |
+| Layout | A solid top bar (56 px) with the name "SNU Caddy". Phones: a bottom sheet from edge to edge. Laptops: a flush panel on the left. Lists are flat rows with hairlines; the selected row has a grey fill. Text is left-aligned (the GO button is the one exception). |
+| Controls | Primary button: black fill. Secondary: grey fill, no border. Destructive: red text. Icon buttons: solid glyphs with square caps. |
+| Words | Short and plain. No slogans and no exclamation marks. |
+| App icon | A black square with the same top-down caddy as the map markers (`assets/icon.svg`); the phone rounds the corners itself. |
+
+The driver screen keeps the same type and shapes on a pure black background
+(OLED). It has one circle (the blue GO) and one big status headline.

@@ -1,5 +1,7 @@
-/* Driver screen: OLED pitch black. Pure #000 background so OLED pixels stay off;
-   only dim text, thin rings and one control are lit. No map, no animation. */
+/* Driver screen: OLED black. Pure #000 background so OLED pixels stay off;
+   only the text and one control are lit. No map, no animation.
+   Same system as app.css (Inter, 8 px corners, no pills), but on its own:
+   this page loads nothing else. */
 
 @font-face {
   font-family: 'Inter Variable';
@@ -13,13 +15,16 @@
 
 :root {
   --black: #000000;
-  --dim: #8a8a8a; /* 6.0:1 on black: readable, but not bright */
-  --soft: #d9d9d9;
-  --line: #262626;
-  --go: #06c167;
-  --go-bg: rgba(6, 193, 103, 0.13);
-  --warn: #f5b544;
-  --danger: #ff5a4f;
+  --text: #e2e2e2; /* not pure white: less light for hours on a dashboard */
+  --dim: #8f8f8f; /* 6.4:1 on black */
+  --fill: #1f1f1f;
+  --fill-press: #333333;
+  --ok: #06c167;
+  --warn: #ffc043;
+  --error: #f25138; /* text on black, 5.9:1 */
+  --error-fill: #e11900; /* white text on it, 4.8:1 */
+  --go: #276ef1;
+  --go-press: #1e54b7;
   color-scheme: dark;
 }
 
@@ -35,7 +40,7 @@ body {
   margin: 0;
   overflow: hidden;
   background: var(--black);
-  color: var(--soft);
+  color: var(--text);
   font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
@@ -57,7 +62,7 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 3px solid #276ef1;
+  outline: 3px solid var(--go);
   outline-offset: 3px;
 }
 
@@ -67,10 +72,10 @@ button:disabled {
   /* minmax(0, 1fr): a long message may not push Go offline off the screen. */
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas: 'top' 'center' 'bottom';
-  gap: 20px;
+  gap: 24px;
   height: 100%;
-  padding: calc(env(safe-area-inset-top, 0px) + 16px) 20px
-    calc(env(safe-area-inset-bottom, 0px) + 24px);
+  padding: env(safe-area-inset-top, 0px) calc(env(safe-area-inset-right, 0px) + 20px)
+    calc(env(safe-area-inset-bottom, 0px) + 24px) calc(env(safe-area-inset-left, 0px) + 20px);
   /* OLED care: driver-screen.js moves everything by a few pixels every minute. */
   translate: var(--nudge-x, 0) var(--nudge-y, 0);
   transition: opacity 0.8s;
@@ -87,24 +92,31 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 24px;
+  height: 56px;
 }
 
 .driver__app {
   color: var(--dim);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   user-select: none;
+}
+
+.driver__app b {
+  margin-right: 6px;
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .driver__net {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   color: var(--dim);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .driver__net::before {
@@ -116,177 +128,148 @@ button:disabled {
 }
 
 .driver__net[data-state='ok']::before {
-  background: var(--go);
+  background: var(--ok);
 }
 
 .driver__net[data-state='bad'] {
-  color: var(--danger);
+  color: var(--error);
 }
 
 .driver__net[data-state='bad']::before {
-  background: var(--danger);
+  background: var(--error);
 }
 
+/* --- Caddy and status: left-aligned, one big line in the tone colour -------- */
 .driver__center {
   grid-area: center;
   align-self: safe center;
   max-height: 100%;
   overflow-y: auto;
-  text-align: center;
 }
 
 .driver__label {
   margin: 0;
   color: var(--dim);
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.driver__name {
-  margin: 6px 0 12px;
-  color: var(--soft);
-  font-size: 44px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-}
-
-.driver__status {
-  margin: 0 auto;
-  max-width: 32ch;
-  color: var(--dim);
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1.45;
-}
-
-.driver__status[data-tone='ok'] {
-  color: var(--go);
-}
-
-.driver__status[data-tone='warn'] {
-  color: var(--warn);
-}
-
-.driver__status[data-tone='error'] {
-  color: var(--danger);
-}
-
-.driver__meta {
-  min-height: 1.4em;
-  margin: 8px auto 0;
-  max-width: 36ch;
-  color: var(--dim);
   font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
   font-variant-numeric: tabular-nums;
 }
 
-/* --- GO (off shift) -------------------------------------------------------- */
+.driver__name {
+  margin: 4px 0 32px;
+  color: var(--text);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 36px;
+  letter-spacing: -0.02em;
+}
+
+.driver__status {
+  margin: 0;
+  max-width: 34ch;
+}
+
+.driver__head {
+  display: block;
+  color: var(--dim);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 44px;
+  letter-spacing: -0.02em;
+}
+
+.driver__status[data-tone='ok'] .driver__head {
+  color: var(--ok);
+}
+
+.driver__status[data-tone='warn'] .driver__head {
+  color: var(--warn);
+}
+
+.driver__status[data-tone='error'] .driver__head {
+  color: var(--error);
+}
+
+.driver__detail {
+  display: block;
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.driver__detail:empty {
+  display: none;
+}
+
+.driver__meta {
+  min-height: 20px;
+  margin: 12px 0 0;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Controls ---------------------------------------------------------------- */
 .driver__bottom {
   grid-area: bottom;
   display: grid;
   place-items: center;
 }
 
+/* The one circle on the page, and the one blue. */
 .driver__go {
-  width: min(64vw, 240px);
+  width: min(56vw, 200px);
   aspect-ratio: 1;
-  border: 4px solid var(--go);
+  border: 0;
   border-radius: 50%;
-  background: var(--black);
-  box-shadow:
-    0 0 0 10px var(--black),
-    0 0 0 12px rgba(6, 193, 103, 0.35);
-  color: var(--go);
-  font-size: 52px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-.driver__go:active {
-  background: var(--go-bg);
-}
-
-.driver__go:disabled {
-  border-color: #1f1f1f;
-  box-shadow: none;
-  color: #3a3a3a;
-}
-
-/* --- On shift: the beacon and Go offline ------------------------------------ */
-.driver[data-mode='on'] .driver__name {
-  margin: 4px 0 4px;
-  font-size: 34px;
-}
-
-/* Thin rings and one dot: few lit pixels. No animation (OLED and battery). */
-.driver__beacon {
-  display: block;
-  width: min(44vw, 168px);
-  height: auto;
-  margin: 18px auto 16px;
-  --beacon: var(--dim);
-}
-
-.driver[data-tone='ok'] .driver__beacon {
-  --beacon: var(--go);
-}
-
-.driver[data-tone='warn'] .driver__beacon {
-  --beacon: var(--warn);
-}
-
-.driver[data-tone='error'] .driver__beacon {
-  --beacon: var(--danger);
-}
-
-.beacon__ring {
-  fill: none;
-  stroke: var(--beacon);
-  stroke-width: 2;
-  opacity: 0.55;
-}
-
-.beacon__ring--outer {
-  opacity: 0.25;
-}
-
-.beacon__dot {
-  fill: var(--beacon);
-}
-
-.driver[data-mode='on'] .driver__status {
-  font-size: 22px;
+  background: var(--go);
+  color: #ffffff;
+  font-size: 40px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
-.driver__off {
-  width: 100%;
-  height: 60px;
-  border: 2px solid #4a2523;
-  border-radius: 999px;
-  background: var(--black);
-  color: #ff8a80;
-  font-size: 18px;
-  font-weight: 700;
+.driver__go:active {
+  background: var(--go-press);
 }
 
+.driver__go:disabled {
+  background: var(--fill);
+  color: #545454;
+}
+
+.driver__off,
+.driver__retry {
+  height: 56px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.driver__off {
+  width: 100%;
+}
+
+.driver__off:active,
+.driver__retry:active {
+  background: var(--fill-press);
+}
+
+/* Second tap needed: the button turns red. */
 .driver__off[data-confirm='true'] {
-  border-color: var(--danger);
-  background: var(--danger);
-  color: var(--black);
+  background: var(--error-fill);
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .driver__retry {
-  height: 52px;
-  padding: 0 28px;
-  border: 2px solid var(--line);
-  border-radius: 999px;
-  background: var(--black);
-  color: var(--soft);
-  font-size: 17px;
-  font-weight: 700;
+  padding: 0 32px;
 }
 
 /* --- Phone on its side (dashboard mount) ------------------------------------- */
@@ -295,37 +278,28 @@ button:disabled {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas: 'top top' 'center bottom';
-    column-gap: 28px;
-    row-gap: 14px;
-    padding-left: calc(env(safe-area-inset-left, 0px) + 20px);
-    padding-right: calc(env(safe-area-inset-right, 0px) + 20px);
+    column-gap: 32px;
+    row-gap: 8px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+
+  .driver__top {
+    height: 48px;
   }
 
   .driver__go {
-    width: min(56vh, 220px);
+    width: min(56vh, 200px);
   }
 
   .driver__name {
-    font-size: 36px;
+    margin-bottom: 16px;
+    font-size: 28px;
+    line-height: 32px;
   }
 
-  .driver__beacon {
-    width: min(26vh, 110px);
-    margin: 10px auto;
-  }
-
-  /* Little height: a warning or an error needs the room more than the beacon. */
-  .driver[data-tone='error'] .driver__beacon,
-  .driver[data-tone='warn'] .driver__beacon {
-    display: none;
-  }
-
-  .driver[data-mode='on'] .driver__status {
-    font-size: 18px;
-  }
-
-  .driver__off {
-    height: 56px;
+  .driver__head {
+    font-size: 32px;
+    line-height: 36px;
   }
 }
 

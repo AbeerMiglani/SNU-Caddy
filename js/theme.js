@@ -1,6 +1,6 @@
 // Theme: 'auto' follows the phone setting; 'light' and 'dark' are manual choices.
 // The inline script in index.html sets data-theme before first paint (no flash);
-// this module keeps it in sync afterwards and owns the floating theme pill.
+// this module keeps it in sync afterwards and owns the theme button in the top bar.
 
 const STORAGE_KEY = 'snucaddy.theme';
 const MODES = ['auto', 'light', 'dark'];
@@ -67,11 +67,11 @@ export function createTheme({ onChange }) {
 }
 
 /**
- * The floating theme pill: each tap moves Auto -> Light -> Dark -> Auto.
- * The pill shows the current mode as an icon and a word.
+ * The theme button: each tap moves Auto -> Light -> Dark -> Auto.
+ * It shows the current mode as an icon and a word.
  * @param {ReturnType<typeof createTheme>} theme
  */
-export function bindThemePill(theme, button, label) {
+export function bindThemeButton(theme, button, label) {
   const sync = () => {
     label.textContent = NAMES[theme.mode];
   };

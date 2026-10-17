@@ -162,11 +162,17 @@ function startAdmin(fb, user) {
       return;
     }
     const id = `caddy_${String(num).padStart(2, '0')}`;
+    // Clear the form now, not after the save: the admin can type the next
+    // caddy while this one saves, and a late reset would erase it.
+    $('fleet-form').reset();
     try {
       await D.set(D.ref(db, `fleet/${id}`), { name });
-      $('fleet-form').reset();
     } catch {
       $('fleet-error').textContent = 'Could not save the caddy.';
+      if (!$('fleet-num').value && !$('fleet-name').value) {
+        $('fleet-num').value = String(num);
+        $('fleet-name').value = name;
+      }
     }
   };
 
@@ -178,7 +184,7 @@ function startAdmin(fb, user) {
     $('drivers-body').replaceChildren(
       ...rows.map(([uid, d]) => {
         const tr = el('tr');
-        const revoke = el('button', 'Revoke', 'btn btn--small btn--danger');
+        const revoke = el('button', 'Revoke', 'btn btn--secondary btn--small btn--danger');
         revoke.type = 'button';
         revoke.addEventListener('click', () => revokePhone(uid, d));
         const phone = el('td');

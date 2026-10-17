@@ -30,9 +30,12 @@ export function createSheet(sheet, { onChange } = {}) {
   let justDragged = false;
   let shrinkTimer = 0;
 
-  /** Pixels of map hidden by the sheet or side panel, for camera framing. */
+  /** Bottom edge of the top bar (it grows with the phone's safe area). */
+  const barBottom = () => document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 64;
+
+  /** Pixels of map hidden by the top bar, the sheet or the side panel, for camera framing. */
   function cover() {
-    const top = 76;
+    const top = barBottom();
     if (wide.matches) return { top, bottom: 0, left: sheet.getBoundingClientRect().right };
     return { top, bottom: visible + gapPx, left: 0 };
   }
@@ -40,8 +43,8 @@ export function createSheet(sheet, { onChange } = {}) {
   function measure() {
     const vh = window.innerHeight;
     gapPx = parseFloat(getComputedStyle(sheet).bottom) || 0;
-    // Full: leave the top bar (brand + buttons) visible above the sheet.
-    const full = Math.max(240, vh - gapPx - 84);
+    // Full: the top bar stays visible above the sheet, with a small strip of map.
+    const full = Math.max(240, vh - gapPx - barBottom() - 8);
     // Peek shows the header plus the first caddy row (or the whole location / empty card).
     const firstRow = body.querySelector('.gate:not([hidden]), .row, .empty:not([hidden])');
     let rowPart = 72;

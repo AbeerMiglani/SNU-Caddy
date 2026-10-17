@@ -78,7 +78,8 @@ function recall(key) {
 
 /**
  * @param {{
- *   login: HTMLElement, loginButton: HTMLButtonElement, loginError: HTMLElement,
+ *   login: HTMLElement, loginButton: HTMLButtonElement, loginTitle: HTMLElement,
+ *   loginError: HTMLElement,
  *   card: HTMLElement, cardTitle: HTMLElement, cardText: HTMLElement, cardAction: HTMLButtonElement,
  *   account: HTMLElement, accountEmail: HTMLElement, signOut: HTMLButtonElement,
  *   behindLogin: HTMLElement[],
@@ -126,7 +127,9 @@ export function createStudentGate(els, { onLive, onChange }) {
     // (not focusable, not read by screen readers).
     for (const el of els.behindLogin) el.inert = !els.login.hidden;
     const showsButton = !els.login.hidden && authKnown;
-    if (showsButton && !loginShown) els.loginButton.focus({ preventScroll: true });
+    // Focus goes to the title, not the button: screen readers start in the
+    // panel, and a phone does not show a focus ring on a button nobody touched.
+    if (showsButton && !loginShown) els.loginTitle.focus({ preventScroll: true });
     loginShown = showsButton;
     els.account.hidden = demo || !signedIn();
     if (signedIn()) els.accountEmail.textContent = user.email;

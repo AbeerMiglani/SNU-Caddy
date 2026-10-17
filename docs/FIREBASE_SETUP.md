@@ -124,7 +124,8 @@ On the admin page, under **Caddies**, add each caddy: number `1`, name
    in Chrome and install it: **⋮ → Add to Home screen / Install app**. Open
    SNU Caddy from the new home-screen icon. (Installed apps get persistent
    storage, so Android does not clear the phone's link.)
-2. Tap the **SNU Caddy** logo **5 times quickly**. The setup screen opens.
+2. Tap the name **SNU Caddy** at the top **5 times quickly**. The setup screen
+   opens.
 3. On the admin page, under **Link a driver phone**, choose the caddy and
    click **Create setup QR**.
 4. On the phone, tap **Scan QR code** and point the camera at the QR. (Or

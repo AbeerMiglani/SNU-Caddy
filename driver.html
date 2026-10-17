@@ -42,27 +42,17 @@
     <!-- OLED driver screen: pure black, no map, little lit text, big controls. -->
     <main class="driver" id="driver" data-mode="boot" data-tone="dim">
       <header class="driver__top">
-        <span class="driver__app">SNU Caddy · Driver</span>
+        <span class="driver__app"><b>SNU Caddy</b> Driver</span>
         <span class="driver__net" id="driver-net" data-state="wait">Connecting…</span>
       </header>
 
       <section class="driver__center">
-        <p class="driver__label" id="driver-label">This phone drives</p>
+        <p class="driver__label" id="driver-label">Driver phone</p>
         <h1 class="driver__name" id="driver-name">…</h1>
-        <!-- On shift: a still beacon. Its colour follows the status line below. -->
-        <svg
-          class="driver__beacon"
-          id="driver-beacon"
-          viewBox="0 0 120 120"
-          aria-hidden="true"
-          hidden
-        >
-          <circle class="beacon__ring beacon__ring--outer" cx="60" cy="60" r="56" />
-          <circle class="beacon__ring" cx="60" cy="60" r="38" />
-          <circle class="beacon__dot" cx="60" cy="60" r="16" />
-        </svg>
+        <!-- The space between the two spans keeps the spoken text natural. -->
         <p class="driver__status" id="driver-status" role="status" data-tone="dim">
-          Checking link…
+          <span class="driver__head" id="driver-head">Checking link…</span>
+          <span class="driver__detail" id="driver-detail"></span>
         </p>
         <p class="driver__meta" id="driver-meta"></p>
       </section>
