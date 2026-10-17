@@ -142,6 +142,21 @@ body.admin {
   font-weight: 500;
 }
 
+/* Own chevron: the browser's arrow sits too close to the border. */
+.field select {
+  padding-right: 44px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 12px 8px;
+  cursor: pointer;
+}
+
+:root[data-theme='dark'] .field select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
 .btn--small {
   width: auto;
   height: 36px;
@@ -284,4 +299,11 @@ body.admin {
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
+}
+
+/* "No phones are linked yet." under the table: same inset as the cells,
+   with room below the header line. */
+.table-empty {
+  margin: 0;
+  padding: 16px 8px 4px;
 }
