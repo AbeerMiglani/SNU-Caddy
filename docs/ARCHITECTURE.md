@@ -21,7 +21,7 @@ flowchart LR
   subgraph Phones
     S["Student app<br/>index.html<br/>(map, Google login, geofence)"]
     D["Driver app<br/>driver.html<br/>(OLED black, GPS, Wake Lock)"]
-    A["Admin dashboard<br/>admin.html<br/>(fleet, QR enrollment, revoke)"]
+    A["Admin dashboard<br/>admin.html<br/>(fleet, QR enrollment, unlink)"]
   end
   subgraph Firebase["Firebase (Spark, free)"]
     AU["Authentication<br/>Google + Anonymous"]
@@ -32,7 +32,7 @@ flowchart LR
 
   D -- "writes caddies/{id}<br/>(5 m or 30 s)" --> DB
   DB -- "WebSocket push<br/>(child events, no polling)" --> S
-  A -- "fleet, codes, revoke" --> DB
+  A -- "fleet, codes, unlink" --> DB
   S & D & A -- "sign-in" --> AU
   S -- "map tiles" --> T
   H -- "app files" --> S & D & A
@@ -71,7 +71,7 @@ sequenceDiagram
   Phone->>DB: ONE atomic update:<br/>drivers/{uid} = {caddyId, code}<br/>enrollCodes/{code}/usedBy = uid
   DB-->>Phone: Rules accept only if the code exists, is unused,<br/>is not expired and matches the caddy
   Phone->>Phone: Save hint in localStorage, open driver.html
-  Admin->>DB: Revoke = delete drivers/{uid}
+  Admin->>DB: Unlink = delete drivers/{uid}
   DB-->>Phone: Next write is denied; the open listener shows "unlinked"
 ```
 
@@ -179,7 +179,7 @@ place of the last move. So GPS noise cannot make a parked caddy "move".
 | Reload or crash during a shift | The shift resumes by itself if it was alive in the last 10 min. Otherwise the screen says why GO is back, and the phone sets its caddy `online: false` (no ghost caddy, even if the old connection dropped before `onDisconnect` was registered). |
 | Go offline while the first write still waits (dead socket) | `online: false` is still sent; the SDK delivers it after the waiting write, so the caddy ends offline. |
 | Go offline (two taps) | `online: false`, then `onDisconnect` cancelled; GPS and wake lock off. |
-| Admin revokes the phone | The `drivers/{uid}` listener fires: the shift stops at once, the phone returns to the student app. The admin page sets `online: false`. |
+| Admin unlinks the phone | The `drivers/{uid}` listener fires: the shift stops at once, the phone returns to the student app. The admin page sets `online: false`. |
 | Writes refused (for example the caddy was removed from the fleet) | Back-off (2, 4, 8 … 30 s); after 3 in a row the screen says "Ask an admin". |
 
 The driver screen is OLED-black: a pure `#000` background and little lit
@@ -195,7 +195,7 @@ a still picture cannot burn in.
 | ---- | ---- | ----- |
 | `caddies` | Verified `@snu.edu.in` accounts | Only the phone bound to **that** caddy (validated fields). Admins may force it offline. |
 | `fleet` | Verified `@snu.edu.in` accounts; a bound phone reads its own caddy | Admins |
-| `drivers/{uid}` | That phone; admins | The phone itself, **only** together with a valid code claim. Admins may delete (revoke). |
+| `drivers/{uid}` | That phone; admins | The phone itself, **only** together with a valid code claim. Admins may delete (unlink). |
 | `enrollCodes/{code}` | Anyone signed in **who knows the exact code**; admins may list | Admins create/delete. A phone may only claim an unused, unexpired code once. |
 | `admins/{uid}` | That user (to check own status) | Nobody from the app (console only) |
 | Everything else | Nobody | Nobody |
@@ -252,13 +252,13 @@ touches live data, sign-in, Firebase's `/__/` pages or map tiles.
 | Threat | Mitigation |
 | ------ | ---------- |
 | A student pretends to be a driver | Writes to `caddies/{id}` need a binding in `drivers/{uid}`, which needs a one-time admin code. Anonymous sign-in alone gives no access (tested). |
-| A driver phone is lost or stolen | Admin taps **Revoke**: the binding is deleted, writes fail at once, and the caddy is set offline. |
-| Someone photographs a setup QR | Single use, 10-minute life, and the admin sees which phone used it (and can revoke). |
+| A driver phone is lost or stolen | Admin taps **Unlink**: the binding is deleted, writes fail at once, and the caddy is set offline. |
+| Someone photographs a setup QR | Single use, 10-minute life, and the admin sees which phone used it (and can unlink it). |
 | Guessing setup codes | 120-bit codes, and the code list cannot be read. No short PIN. |
 | Non-SNU people read caddy positions | Rules need a **verified** `@snu.edu.in` email. Look-alike domains (`@snu.edu.in.evil.com`) fail (tested). Non-SNU Google accounts are deleted right after sign-in. |
 | The Firebase web config is "public" | It is public by design. Security is in the rules, not in the config. Optional: restrict the browser API key to the app's domains (setup guide). |
-| A bound phone sends junk or floods writes | Field validation, campus box, accuracy limit, server timestamps, and at most 1 position write per second (GPS fields and `movedAt` cannot change without a new timestamp; tested). An abusive phone is revoked. |
-| A setup QR is replaced or left on screen | When the admin makes a new code, signs out or closes the page, the unused code is deleted at once. Unused codes also expire after 10 minutes. |
+| A bound phone sends junk or floods writes | Field validation, campus box, accuracy limit, server timestamps, and at most 1 position write per second (GPS fields and `movedAt` cannot change without a new timestamp; tested). An abusive phone is unlinked. |
+| A setup QR is replaced or left on screen | When the admin creates a new code, signs out or closes the page, the unused code is deleted at once. Unused codes also expire after 10 minutes. |
 | Driver location outside work | The phone shares only between GO and Go offline, and stops at the campus fence + 100 m. The rules also reject positions outside the campus box. |
 | Student location privacy | The geofence check runs **on the phone**. The location is never sent or stored. |
 | Ghost caddies (dead battery, closed app, dead zone) | `onDisconnect()` sets `online: false` on the server (tested). Students also dim any caddy whose `lastUpdated` is older than **90 s** and label it "Signal lost". |
@@ -274,7 +274,7 @@ touches live data, sign-in, Firebase's `/__/` pages or map tiles.
 | Database storage | 1 GB | A few KB (state overwrite, no history) |
 | Database download | 10 GB/month (~360 MB/day) | About 1–2 MB per student per hour of viewing (each moving caddy writes at most once every 2 s; a parked one every 30 s). Sessions are short (open, look, close), and listeners stop when the app is hidden. |
 | Simultaneous DB connections | **100** | Driver phones (one per caddy) + students who have the app **on screen, on campus, and touched it in the last 5 minutes**. In every other case the student app closes its connection. |
-| New accounts | 100 per hour per IP address | Campus Wi-Fi shares IP addresses, so plan a staggered launch. The app shows a clear "try again in a few minutes" message. |
+| New accounts | 100 per hour per IP address | Campus Wi-Fi shares IP addresses, so plan a staggered launch. The app says "Too many sign-ins from this network right now. Wait a few minutes, or use mobile data." |
 | Email-link sign-in | 5 emails/day | Not used. |
 | Daily active users | 3,000/day **only** if the project is upgraded to "Identity Platform" | Do **not** upgrade. Standard Firebase Auth is enough. |
 | Hosting | 10 GB storage, 360 MB/day transfer | App files are about 200 KB and are sent with `no-cache`, so repeat visits are mostly small "not changed" (304) answers. The service worker copy is used only when the network fails or is slow. Leaflet and the Firebase SDK come from public CDNs. |
@@ -295,17 +295,17 @@ but it needs a billing account. That is a decision for SNU IT.
 | Phone battery dies, app is killed | The server runs `onDisconnect`: `online: false`. |
 | Phone clock is wrong | All times are server time (`ServerValue.TIMESTAMP`); students use the server time offset for the 90 s and 60 s checks (tested with a phone clock 10 minutes fast). |
 | Student switches app or locks the phone | Page Visibility API: no GPS, no timers, database connection closed. |
-| Student leaves the app open on a desk | After 5 minutes without a touch, live updates pause and the connection closes. A bar says "Live updates paused. Tap to resume." |
+| Student leaves the app open on a desk | After 5 minutes without a touch, live updates pause and the connection closes. A bar says "Live map paused. Tap to resume." |
 | Student opens the app in a dead zone | The service worker serves the app; the list says "Connecting…" until the database answers. |
 | Network blocks WebSockets | The Firebase SDK falls back to long polling (allowed by the CSP). |
-| Student is off campus | "You're outside campus. Live tracking activates on campus grounds." No data is loaded. |
+| Student is off campus | "You are outside campus. Caddies show here when you are on campus." No data is loaded. |
 | Student denies location | The sheet explains why location is needed and that it stays on the phone. No data is loaded. |
 | Site opened over plain `http://` | Location needs HTTPS; the app says so. |
 | Non-SNU Google account | The account is removed again, and the app asks for an `@snu.edu.in` account. |
 | Too many sign-ups from one network | Clear message; try again later or on mobile data. |
 | Setup code expired or already used | Clear message; the admin makes a new code. |
 | Driver phone storage was cleared | The phone opens the student app; the admin links it again. |
-| Phone revoked while driving | The shift stops at once and the driver screen shows "An admin unlinked this phone". |
+| Phone unlinked while driving | The shift stops at once and the driver screen shows "An admin unlinked this phone". |
 | Driver denies location | The shift does not start; the screen explains how to allow location in Chrome. |
 | Driver leaves campus during a shift | Location not shared; the caddy shows offline until it is back. |
 | Screen Wake Lock refused (battery saver) | The screen says the screen can turn off; every tap tries again. |
@@ -340,4 +340,6 @@ looks like the work of one team. The rules (`css/app.css` holds the tokens):
 | App icon | A black square with the same top-down caddy as the map markers (`assets/icon.svg`); the phone rounds the corners itself. |
 
 The driver screen keeps the same type and shapes on a pure black background
-(OLED). It has one circle (the blue GO) and one big status headline.
+(OLED). It has one circle (the blue GO) and one big status headline. That
+headline (40 px) is the one size outside the scale: the driver reads it at a
+glance from the seat.

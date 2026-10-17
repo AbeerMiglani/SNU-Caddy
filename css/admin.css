@@ -78,9 +78,9 @@ body.admin {
 
 .section__title {
   margin: 0 0 16px;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  line-height: 26px;
+  line-height: 24px;
   letter-spacing: -0.01em;
 }
 
@@ -175,18 +175,11 @@ code {
   font-weight: 400;
 }
 
-.field input:focus-visible,
-.field select:focus-visible {
-  border-color: var(--fg);
-  outline: 2px solid var(--fg);
-  outline-offset: 0;
-}
-
 /* Own chevron: the browser's arrow sits too close to the border. */
 .field select {
   padding-right: 44px;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='square'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 16px center;
   background-size: 12px 8px;
@@ -194,7 +187,7 @@ code {
 }
 
 :root[data-theme='dark'] .field select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='square'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
 }
 
 /* --- User ID (not an admin yet) ------------------------------------------------ */
@@ -211,7 +204,13 @@ code {
   border-radius: 8px;
   background: var(--fill);
   font-size: 14px;
+  line-height: 20px;
   word-break: break-all;
+}
+
+/* Same height and line as the ID tile (36 px). */
+.uid .btn {
+  margin-top: 0;
 }
 
 /* --- Caddies: flat rows --------------------------------------------------------- */
@@ -298,6 +297,9 @@ code {
 /* --- Linked phones -------------------------------------------------------------- */
 .table-wrap {
   overflow-x: auto;
+  /* Room for the Unlink button's focus ring; the button stays on the page edge. */
+  margin-right: -6px;
+  padding-right: 6px;
 }
 
 .table {
@@ -336,6 +338,11 @@ code {
   font-weight: 500;
 }
 
+.table td:first-child,
+.table td:nth-child(3) {
+  white-space: nowrap;
+}
+
 .muted {
   color: var(--text-2);
 }
@@ -349,5 +356,10 @@ code {
 @media (max-width: 480px) {
   .who__email {
     display: none;
+  }
+
+  /* Both forms the same way on phones: the button under the fields. */
+  .row-form .btn--auto {
+    flex: 1 1 100%;
   }
 }

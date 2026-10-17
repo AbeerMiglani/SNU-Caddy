@@ -2,7 +2,7 @@
 //
 // Pure black, no map, little lit text. The phone needs no login: it is the
 // anonymous account that the one-time QR setup linked to one caddy. An admin's
-// "Revoke" reaches the phone within a second and stops the shift.
+// "Unlink" reaches the phone within a second and stops the shift.
 
 import { DRIVER, GEOFENCE, LIVE } from './config.js';
 import { CAMPUS_POLYGON } from './data/campus.js';
@@ -44,7 +44,7 @@ const els = {
 const ui = {
   /** Message before the shift engine exists: [headline, detail, tone]. */
   boot: ['Checking link…', '', 'dim'],
-  /** Connection state before the shift engine exists ('wait' | 'bad' | null = hidden). */
+  /** Connection note before the shift engine exists ('wait' | 'bad' | null = hidden). */
   bootNet: 'wait',
   /** Set when the phone lost its link: [headline, detail]. The screen shows only this. */
   unlinked: null,
@@ -94,10 +94,7 @@ async function boot(link) {
       return;
     }
     if (firebaseLoadFailed()) {
-      setBoot(
-        ['No connection', 'This phone stays linked. It tries again by itself.', 'warn'],
-        'bad',
-      );
+      setBoot(['No internet', 'This phone stays linked. It tries again by itself.', 'warn'], 'bad');
       retryWhenOnline(RETRY_MS);
     } else {
       // A setup error (for example a bad web config). Keep retrying slowly, so
@@ -157,7 +154,7 @@ async function boot(link) {
 }
 
 /**
- * Live link check: an admin's "Revoke" deletes drivers/{uid}. While the phone
+ * Live link check: an admin's "Unlink" deletes drivers/{uid}. While the phone
  * is offline nothing fires and the phone simply stays linked.
  */
 function watchLink(fb, user, link) {
@@ -348,17 +345,19 @@ function render() {
     wakeScreen();
   }
 
-  // Connection state, top right.
-  const net = !shift ? ui.bootNet : s?.connected ? 'ok' : 'bad';
-  els.net.hidden = Boolean(ui.unlinked) || !net;
-  if (net) {
-    els.net.dataset.state = net;
-    els.net.textContent = { wait: 'Connecting…', ok: 'Connected', bad: 'No connection' }[net];
-  }
-
   els.label.textContent = on ? `On shift · ${since(s.since)}` : 'Driver phone';
 
   const [head, detail, tone] = statusLine(s);
+
+  // Connection note, top right: only for a problem the headline does not say
+  // already. "Online" / "Offline" in the headline mean seen / not seen by students.
+  const net = !shift ? ui.bootNet : s?.connected ? null : 'bad';
+  els.net.hidden = Boolean(ui.unlinked) || !net || head === 'No internet';
+  if (net) {
+    els.net.dataset.state = net;
+    els.net.textContent = { wait: 'Connecting…', bad: 'No internet' }[net];
+  }
+
   // role=status: change the text only when it changes, so it is said once.
   if (els.head.textContent !== head) els.head.textContent = head;
   if (els.detail.textContent !== detail) els.detail.textContent = detail;
@@ -367,10 +366,15 @@ function render() {
   els.root.dataset.tone = tone;
   els.meta.textContent = metaLine(s, on);
 
+  // GO and Go offline replace each other: keep keyboard / TalkBack focus on
+  // the one that is now on screen.
+  const had = document.activeElement;
   els.go.hidden = on || Boolean(ui.unlinked);
   els.go.disabled = !shift;
   els.off.hidden = !on;
   if (shift || ui.unlinked) els.retry.hidden = true;
+  if (had === els.go && els.go.hidden && !els.off.hidden) els.off.focus();
+  else if (had === els.off && els.off.hidden && !els.go.hidden) els.go.focus();
 }
 
 /** A problem lights a dimmed screen again: an error at once, a warning after 10 s. */
@@ -440,23 +444,25 @@ function statusLine(s) {
   if (s.gps === 'weak') {
     // The error radius is in the meta line: the live status text stays still.
     return s.sentAt === null
-      ? ['GPS is weak', 'Waiting for a sharper fix.', 'warn']
+      ? ['GPS is weak', 'Waiting for a better GPS signal.', 'warn']
       : ['GPS is weak', 'Students see your last good position.', 'warn'];
   }
-  if (s.sentAt === null) return ['Connecting…', 'Sending your location.', 'dim'];
+  if (s.sentAt === null) {
+    return ['Sending location…', 'Students see this caddy after the first update.', 'dim'];
+  }
   // The connection looks up, but the server has not confirmed a write for a
   // while (a half-open connection in a weak-signal spot): say so before
   // students see "Signal lost".
   if (Date.now() - s.sentAt > STALE_MS) {
     return ['Not reaching the server', 'Your location is sent when the signal is back.', 'warn'];
   }
-  return ['Online', 'Broadcasting your location to students.', 'ok'];
+  return ['Online', 'Students can see this caddy.', 'ok'];
 }
 
 function metaLine(s, on) {
   if (ui.unlinked || !s) return '';
   if (!on) {
-    return s.connected ? '' : 'You can start now. Sharing begins when the phone is online.';
+    return s.connected ? '' : 'You can start now. Sharing begins when the phone has internet.';
   }
   const parts = [];
   if (s.sentAt !== null) parts.push(`Updated ${ago(s.sentAt)}`);
@@ -468,6 +474,7 @@ function metaLine(s, on) {
 
 function ago(t) {
   const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 5) return 'just now'; // the same words as the student list
   return s < 60 ? `${s} s ago` : `${Math.floor(s / 60)} min ago`;
 }
 

@@ -65,7 +65,7 @@
 
       <section class="panel" id="view-offline" hidden>
         <h1 class="page-title">No connection</h1>
-        <p class="hint">Check the internet connection, then reload this page.</p>
+        <p class="hint">Check your internet, then reload this page.</p>
         <button class="btn btn--primary btn--auto" id="reload" type="button">Reload</button>
       </section>
 
@@ -79,19 +79,20 @@
       </section>
 
       <section class="panel" id="view-denied" hidden>
-        <h1 class="page-title">You are not an admin</h1>
+        <h1 class="page-title">Not an admin yet</h1>
         <p class="hint">
-          This account is not on the admin list. Send your user ID to the project owner. They add it
-          under <code>admins</code> in the Firebase console (Realtime Database → Data) with the
-          value <code>true</code>.
+          Send your user ID to the project owner. They add it under <code>admins</code> in the
+          Firebase console (Realtime Database → Data) with the value <code>true</code>.
         </p>
         <p class="uid">
           <code id="my-uid"></code>
           <button class="btn btn--secondary btn--small" id="copy-uid" type="button">Copy</button>
         </p>
+        <p class="sr-only" id="copy-status" role="status"></p>
       </section>
 
       <div class="sections" id="view-admin" hidden>
+        <h1 class="sr-only">SNU Caddy admin</h1>
         <section class="section" aria-labelledby="h-fleet">
           <h2 class="section__title" id="h-fleet">Caddies</h2>
           <ul class="fleet" id="fleet-list"></ul>
@@ -121,9 +122,9 @@
           <form class="row-form" id="code-form">
             <label class="field">
               <span>Caddy</span>
-              <select id="code-caddy" required></select>
+              <select id="code-caddy"></select>
             </label>
-            <button class="btn btn--primary btn--auto" type="submit">Create setup QR</button>
+            <button class="btn btn--primary btn--auto" type="submit">Create setup code</button>
           </form>
           <div class="code-box" id="code-box" hidden>
             <div class="code-qr" id="code-qr" role="img" aria-label="Setup QR code"></div>

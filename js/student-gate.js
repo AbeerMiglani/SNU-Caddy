@@ -26,27 +26,27 @@ const CARDS = {
     action: 'Checking…', // stays on screen (disabled) so keyboard focus is kept
   },
   ask: {
-    title: 'Live caddies are for students on campus',
-    text: 'SNU Caddy checks your location once to confirm that you are on campus. Your location stays on this phone.',
+    title: 'Caddies show only on campus',
+    text: 'SNU Caddy uses your location only to check that you are on campus. It stays on this phone.',
     action: 'Allow location',
   },
   outside: {
-    title: 'You’re outside campus',
-    text: 'Live tracking activates on campus grounds.',
+    title: 'You are outside campus',
+    text: 'Caddies show here when you are on campus.',
     action: 'Check again',
   },
   uncertain: {
-    title: 'We could not confirm you are on campus',
+    title: 'Could not confirm that you are on campus',
     text: 'Your location is not precise enough. Move to an open area and check again.',
     action: 'Check again',
   },
   denied: {
-    title: 'Location is off for SNU Caddy',
-    text: 'Live caddies show only on campus, so the app needs your location once. It stays on this phone. Allow location for this site in your browser settings, then try again.',
+    title: 'Location is blocked',
+    text: 'Caddies show only on campus, so SNU Caddy needs your location. Allow location for this site in your browser settings, then tap Try again.',
     action: 'Try again',
   },
   unavailable: {
-    title: 'Can’t find your location',
+    title: 'Could not find your location',
     text: 'Turn on location (GPS) on your phone, then try again.',
     action: 'Try again',
   },
@@ -81,6 +81,7 @@ function recall(key) {
  *   login: HTMLElement, loginButton: HTMLButtonElement, loginTitle: HTMLElement,
  *   loginError: HTMLElement,
  *   card: HTMLElement, cardTitle: HTMLElement, cardText: HTMLElement, cardAction: HTMLButtonElement,
+ *   listTitle: HTMLElement,
  *   account: HTMLElement, accountEmail: HTMLElement, signOut: HTMLButtonElement,
  *   behindLogin: HTMLElement[],
  * }} els
@@ -119,6 +120,9 @@ export function createStudentGate(els, { onLive, onChange }) {
   }
 
   function render() {
+    const had = document.activeElement;
+    const loginWasOpen = !els.login.hidden;
+    const cardWasOpen = !els.card.hidden;
     // Until Firebase knows the session, the login screen is a plain splash (no flash of
     // the sign-in button for students who are already signed in).
     els.login.hidden = demo || (authKnown && signedIn());
@@ -145,6 +149,14 @@ export function createStudentGate(els, { onLive, onChange }) {
       els.cardAction.textContent = card.action ?? '';
       // aria-disabled, not disabled: disabling the focused button would drop focus.
       els.cardAction.setAttribute('aria-disabled', String(checking));
+    }
+    // A control that disappears takes the focus with it (to <body>). Put it on the
+    // next thing to read: the location card when it shows, else the caddy list.
+    const lostLogin =
+      loginWasOpen && els.login.hidden && (had === document.body || els.login.contains(had));
+    const lostCard = cardWasOpen && els.card.hidden && els.card.contains(had);
+    if (lostLogin || lostCard) {
+      (els.card.hidden ? els.listTitle : els.cardTitle).focus({ preventScroll: true });
     }
     updateLive();
     onChange?.();
@@ -241,7 +253,7 @@ export function createStudentGate(els, { onLive, onChange }) {
       authKnown = true;
       showLoginError(
         firebaseLoadFailed()
-          ? 'Can’t reach SNU Caddy. Check your internet, then tap Continue to try again.'
+          ? 'No connection. Check your internet, then tap Continue with Google.'
           : 'SNU Caddy has a setup problem. Please tell the SNU IT team.',
       );
       render();
@@ -253,7 +265,7 @@ export function createStudentGate(els, { onLive, onChange }) {
       authKnown = true;
       if (u && !u.isAnonymous && !isSnuUser(u)) {
         showLoginError(
-          `${u.email ?? 'That account'} is not an SNU account. Use your @snu.edu.in Google account.`,
+          `${u.email ?? 'That account'} cannot sign in here. Use your @snu.edu.in account.`,
         );
         await rejectAccount(fb, u);
         return;

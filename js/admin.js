@@ -57,9 +57,24 @@ async function boot() {
     }
   });
   $('sign-out').addEventListener('click', () => fb.A.signOut(fb.auth));
-  $('copy-uid').addEventListener('click', () =>
-    navigator.clipboard?.writeText($('my-uid').textContent).catch(() => {}),
-  );
+  let copyTimer = 0;
+  $('copy-uid').addEventListener('click', async () => {
+    const btn = $('copy-uid');
+    clearTimeout(copyTimer);
+    try {
+      await navigator.clipboard.writeText($('my-uid').textContent);
+      btn.textContent = 'Copied';
+      $('copy-status').textContent = 'User ID copied.';
+    } catch {
+      // No clipboard (old browser, or not allowed): select the ID for a manual copy.
+      window.getSelection().selectAllChildren($('my-uid'));
+      $('copy-status').textContent = 'Could not copy. The ID is selected: copy it by hand.';
+    }
+    copyTimer = setTimeout(() => {
+      btn.textContent = 'Copy';
+      $('copy-status').textContent = '';
+    }, 2000);
+  });
 
   let stop = null;
   fb.A.onAuthStateChanged(fb.auth, async (user) => {
@@ -73,7 +88,7 @@ async function boot() {
     }
     if (!isSnuUser(user)) {
       $('signin-error').textContent =
-        `${user.email ?? 'This account'} is not an SNU account. Use your @snu.edu.in Google account.`;
+        `${user.email ?? 'That account'} cannot sign in here. Use your @snu.edu.in account.`;
       await rejectAccount(fb, user);
       return;
     }
@@ -133,7 +148,10 @@ function startAdmin(fb, user) {
     list.replaceChildren(
       ...ids.map((id) => {
         const li = el('li');
-        li.append(el('span', caddyName(id), 'fleet__name'), el('code', id, 'fleet__id'));
+        li.append(
+          el('span', caddyName(id), 'fleet__name'),
+          el('span', `No. ${id.slice(-2)}`, 'fleet__id'),
+        );
         return li;
       }),
     );
@@ -162,13 +180,22 @@ function startAdmin(fb, user) {
       return;
     }
     const id = `caddy_${String(num).padStart(2, '0')}`;
+    // set() replaces: a number that exists already would rename that caddy.
+    const old = fleet[id]?.name;
+    if (
+      old &&
+      old !== name &&
+      !window.confirm(`Caddy number ${num} is “${old}”. Rename it to “${name}”?`)
+    ) {
+      return;
+    }
     // Clear the form now, not after the save: the admin can type the next
     // caddy while this one saves, and a late reset would erase it.
     $('fleet-form').reset();
     try {
       await D.set(D.ref(db, `fleet/${id}`), { name });
     } catch {
-      $('fleet-error').textContent = 'Could not save the caddy.';
+      $('fleet-error').textContent = 'Could not save the caddy. Try again.';
       if (!$('fleet-num').value && !$('fleet-name').value) {
         $('fleet-num').value = String(num);
         $('fleet-name').value = name;
@@ -184,61 +211,69 @@ function startAdmin(fb, user) {
     $('drivers-body').replaceChildren(
       ...rows.map(([uid, d]) => {
         const tr = el('tr');
-        const revoke = el('button', 'Revoke', 'btn btn--secondary btn--small btn--danger');
-        revoke.type = 'button';
-        revoke.addEventListener('click', () => revokePhone(uid, d));
+        const unlink = el('button', 'Unlink', 'btn btn--secondary btn--small btn--danger');
+        unlink.type = 'button';
+        // Every row has an "Unlink": the name says which phone (it starts with the visible word).
+        unlink.setAttribute('aria-label', `Unlink ${caddyName(d.caddyId)}’s phone`);
+        unlink.addEventListener('click', () => unlinkPhone(uid, d));
         const phone = el('td');
-        phone.append(el('span', d.device || 'Phone'), el('code', ` ${uid.slice(0, 6)}`, 'muted'));
-        const when = d.enrolledAt ? new Date(d.enrolledAt).toLocaleString() : '';
+        // The start of the uid tells two phones of the same model apart.
+        phone.append(el('span', d.device || 'Phone'), el('span', ` · ${uid.slice(0, 6)}`, 'muted'));
+        const when = d.enrolledAt
+          ? new Date(d.enrolledAt).toLocaleString([], {
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : '';
         tr.append(el('td', caddyName(d.caddyId)), phone, el('td', when), el('td'));
-        tr.lastChild.append(revoke);
+        tr.lastChild.append(unlink);
         return tr;
       }),
     );
     $('drivers-empty').hidden = rows.length > 0;
   }
 
-  async function revokePhone(uid, d) {
+  async function unlinkPhone(uid, d) {
     const name = caddyName(d.caddyId);
     $('drivers-error').textContent = '';
     // The database applies writes locally first: offline, the row would vanish
-    // although the server never heard of the revoke.
+    // although the server never heard of the unlink.
     if (!connected) {
-      $('drivers-error').textContent = `No connection. The phone of ${name} was NOT unlinked.`;
+      $('drivers-error').textContent =
+        `No connection. ${name}’s phone is still linked. Try again when the page is online.`;
       return;
     }
-    if (
-      !window.confirm(`Unlink this phone from ${name}? It can no longer send locations, at once.`)
-    ) {
+    if (!window.confirm(`Unlink ${name}’s phone? It stops sending locations right away.`)) {
       return;
     }
-    $('drivers-status').textContent = `Unlinking the phone of ${name}…`;
+    $('drivers-status').textContent = `Unlinking ${name}’s phone…`;
     try {
       await confirmed(D.remove(D.ref(db, `drivers/${uid}`)), () => {
         $('drivers-status').textContent =
-          'Still waiting for the connection. Keep this page open until it says "Unlinked".';
+          'Still waiting for the connection. Keep this page open until it says “Unlinked”.';
       });
-      // Students should not see a ghost caddy from a revoked phone.
+      // Students should not see a ghost caddy from an unlinked phone.
       const live = await D.get(D.ref(db, `caddies/${d.caddyId}`));
       if (live.exists() && live.val().online) {
         await D.update(D.ref(db, `caddies/${d.caddyId}`), { online: false });
       }
-      $('drivers-status').textContent =
-        `Unlinked. The phone of ${name} can no longer send locations.`;
+      $('drivers-status').textContent = `Unlinked. ${name}’s phone can no longer send locations.`;
     } catch {
       $('drivers-status').textContent = '';
-      $('drivers-error').textContent = `The phone of ${name} was NOT unlinked. Try again.`;
+      $('drivers-error').textContent = `Could not unlink ${name}’s phone. Try again.`;
     }
   }
 
-  // --- Setup QR codes -------------------------------------------------------------
+  // --- Setup codes (QR + typed) ------------------------------------------------------
   $('code-form').onsubmit = async (e) => {
     e.preventDefault();
     if (creating) return; // a double click must not make two codes
     $('code-error').textContent = '';
     const caddyId = $('code-caddy').value;
     if (!caddyId) {
-      $('code-error').textContent = 'Add a caddy first (below).';
+      $('code-error').textContent = 'Add a caddy first, under Caddies.';
       return;
     }
     if (!connected) {

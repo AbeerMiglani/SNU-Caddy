@@ -60,23 +60,29 @@ function scheduleRender() {
 function renderNow() {
   clearTimeout(renderTimer);
   renderTimer = 0;
-  // Connecting, paused or refused: no empty-state text.
-  const noCard = liveStatus === 'connecting' || liveStatus === 'denied' || idlePaused;
-  $('#sheet').classList.toggle('is-loading', noCard && !demo.running);
-  if (list.render(caddies, selectedId, summaryNote())) sheet.refresh();
+  // "A caddy shows here when…" only when live data is really loaded (or there
+  // is no Firebase project): not while signing in, connecting, paused or refused.
+  // Idle pause and sign-out switch live data off ('off').
+  const loading =
+    FIREBASE_ON && !demo.running && liveStatus !== 'live' && liveStatus !== 'reconnecting';
+  const sheetEl = $('#sheet');
+  const changed = sheetEl.classList.contains('is-loading') !== loading;
+  sheetEl.classList.toggle('is-loading', loading);
+  if (list.render(caddies, selectedId, summaryNote()) || changed) sheet.refresh();
 }
 
 /** A sheet summary that replaces the caddy count, or null. */
 function summaryNote() {
-  // While the location card shows, no live data is loaded.
-  if ($('#sheet').classList.contains('is-gated')) return 'Live tracking paused';
+  // The location card below says it all.
+  if ($('#sheet').classList.contains('is-gated')) return '';
   if (demo.running) return null;
-  if (idlePaused) return 'Paused to save battery';
+  if (idlePaused) return 'Paused'; // the bar at the top says how to resume
   return (
     {
+      off: FIREBASE_ON ? 'Connecting…' : null,
       connecting: 'Connecting…',
       reconnecting: 'Reconnecting…',
-      denied: 'Can’t load caddies. Sign out, then sign in again.',
+      denied: 'Could not load caddies. Sign out, then sign in again.',
     }[liveStatus] ?? null
   );
 }
@@ -151,6 +157,7 @@ const gate = FIREBASE_ON
         cardTitle: $('#gate-title'),
         cardText: $('#gate-text'),
         cardAction: $('#gate-action'),
+        listTitle: $('#sheet-title'),
         account: $('#account'),
         accountEmail: $('#account-email'),
         signOut: $('#sign-out'),
@@ -204,21 +211,19 @@ function setDemo(on) {
   if (on) demo.start();
   else demo.stop();
   demoSwitch.setAttribute('aria-checked', String(on));
-  $('#demo-banner').hidden = !on;
   gate?.setDemo(on);
   renderNow();
 }
 
 demoSwitch.addEventListener('click', () => setDemo(!demo.running));
-$('#empty-demo').addEventListener('click', () => {
+$('#login-demo').addEventListener('click', () => {
   setDemo(true);
   demoSwitch.focus(); // The focused button just disappeared; keep keyboard focus nearby.
 });
-$('#login-demo').addEventListener('click', () => setDemo(true));
 
-// Hidden driver-phone setup, loaded only when used: 5 quick taps on a logo, or a
-// #enroll= link from the admin QR. A new driver phone is signed out, so the logo
-// on the sign-in screen works too.
+// Hidden driver-phone setup, loaded only when used: 5 quick taps on the name, or a
+// #enroll= link from the admin QR. The top bar stays usable on the sign-in screen,
+// so a new (signed-out) driver phone can use the name too.
 const enrollLink = /[#&]enroll=/.test(location.hash) ? location.hash : null;
 if (enrollLink) history.replaceState(null, '', location.pathname + location.search); // no code in the URL bar
 const openSetup = (link = null) =>

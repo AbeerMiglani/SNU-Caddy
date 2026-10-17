@@ -132,14 +132,22 @@ export class CaddyLayer {
 
   select(id) {
     if (this.selectedId === id) return;
-    this.items.get(this.selectedId)?.el.classList.remove('is-selected');
+    const old = this.items.get(this.selectedId);
     this.selectedId = id;
+    if (old) {
+      old.el.classList.remove('is-selected');
+      this.setZ(old);
+    }
     const it = this.items.get(id);
     if (!it) return;
-    // Restart the short pulse animation on every new selection.
-    it.el.classList.remove('is-selected');
-    void it.el.offsetWidth;
     it.el.classList.add('is-selected');
+    this.setZ(it);
+  }
+
+  /** Caddies a student can catch draw above the others; the selected one above all. */
+  setZ(it) {
+    const byState = { lost: -500, offline: -1000 }[it.state] ?? 0;
+    it.marker.setZIndexOffset(byState + (it.el.classList.contains('is-selected') ? 2000 : 0));
   }
 
   // ---------------------------------------------------------------------------
@@ -153,6 +161,13 @@ export class CaddyLayer {
     });
     const marker = L.marker(target, { icon, keyboard: true, title: c.name, riseOnHover: true });
     marker.on('click', () => this.onSelect?.(c.id));
+    // The marker is a tab stop announced as a button: Enter and Space select it.
+    marker.on('keypress', (e) => {
+      const k = e.originalEvent.key;
+      if (k !== 'Enter' && k !== ' ') return;
+      e.originalEvent.preventDefault();
+      this.onSelect?.(c.id);
+    });
     marker.addTo(this.map);
 
     const el = marker.getElement();
@@ -189,8 +204,7 @@ export class CaddyLayer {
     const label = `${c.name}, ${STATE_TEXT[c.state] ?? c.state}`;
     it.el.setAttribute('aria-label', label);
     it.el.title = label; // the hover tooltip follows renames and state changes
-    // Caddies a student can catch draw above the others.
-    it.marker.setZIndexOffset({ lost: -500, offline: -1000 }[c.state] ?? 0);
+    this.setZ(it);
   }
 
   /** Face the direction of travel. Prefer the phone's own heading when it is moving. */

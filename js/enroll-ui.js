@@ -81,7 +81,7 @@ function createUi(dialog) {
     starting = token;
     scanBox.hidden = false;
     scanBtn.textContent = 'Stop camera';
-    say('Point the camera at the setup QR.');
+    say('Point the camera at the QR code on the admin page.');
     try {
       const started = await startScanner(video, (code) => {
         scanner = null;
@@ -151,12 +151,12 @@ function createUi(dialog) {
     } catch (err) {
       if (err instanceof EnrollError) say(err.message, 'error');
       else if (firebaseLoadFailed())
-        say('No connection. Check the internet, then reload the page.', 'error');
+        say('No connection. Check your internet, then reload the page.', 'error');
       else if (err?.code === 'auth/operation-not-allowed')
         say('Anonymous sign-in is off. (Admin: turn it on in Firebase Authentication.)', 'error');
       else if (err?.code === 'auth/network-request-failed')
-        say('No connection. Check the internet and try again.', 'error');
-      else say('Linking did not work. Try again, or make a new code.', 'error');
+        say('No connection. Check your internet and try again.', 'error');
+      else say('Linking did not work. Try again, or create a new setup code.', 'error');
     } finally {
       setBusy(false);
       // The code check opened a database connection. Without a link, and with

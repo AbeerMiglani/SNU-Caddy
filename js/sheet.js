@@ -43,8 +43,9 @@ export function createSheet(sheet, { onChange } = {}) {
   function measure() {
     const vh = window.innerHeight;
     gapPx = parseFloat(getComputedStyle(sheet).bottom) || 0;
-    // Full: the top bar stays visible above the sheet, with a small strip of map.
-    const full = Math.max(240, vh - gapPx - barBottom() - 8);
+    // Full: the top bar stays visible above the sheet, with a strip of map that
+    // fits the map attribution.
+    const full = Math.max(240, vh - gapPx - barBottom() - 24);
     // Peek shows the header plus the first caddy row (or the whole location / empty card).
     const firstRow = body.querySelector('.gate:not([hidden]), .row, .empty:not([hidden])');
     let rowPart = 72;
@@ -60,6 +61,10 @@ export function createSheet(sheet, { onChange } = {}) {
     visible = px;
     sheet.classList.toggle('is-animating', animate);
     sheet.style.transform = `translate3d(0, ${heights.full - px}px, 0)`;
+    // The map button and the attribution follow the sheet: with the same slide
+    // when it snaps, at once when it is dragged or its content changes.
+    root.classList.toggle('sheet-animating', animate);
+    root.style.setProperty('--sheet-visible', `${Math.round(px)}px`);
   }
 
   /** The list scrolls inside the visible part only. */
@@ -87,9 +92,17 @@ export function createSheet(sheet, { onChange } = {}) {
   function settle(animate) {
     fitBody(animate);
     sheet.classList.toggle('is-full', snap === 'full');
-    root.style.setProperty('--sheet-visible', `${Math.round(visible)}px`);
-    grab.setAttribute('aria-expanded', String(snap !== 'peek'));
-    grab.setAttribute('aria-label', snap === 'full' ? 'Collapse caddy list' : 'Expand caddy list');
+    // At full, the map button would sit under the top bar.
+    root.classList.toggle('sheet-full', snap === 'full');
+    // The label says what a tap does next.
+    grab.setAttribute(
+      'aria-label',
+      {
+        peek: 'Show more caddies',
+        half: 'Show the full caddy list',
+        full: 'Collapse the caddy list',
+      }[snap],
+    );
     onChange?.(cover());
   }
 
@@ -218,6 +231,7 @@ export function createSheet(sheet, { onChange } = {}) {
       sheet.style.transform = '';
       body.style.maxHeight = '';
       sheet.classList.remove('is-full');
+      root.classList.remove('sheet-full', 'sheet-animating');
       root.style.setProperty('--sheet-visible', '0px');
       onChange?.(cover());
       return;

@@ -21,7 +21,7 @@
   --fill-press: #333333;
   --ok: #06c167;
   --warn: #ffc043;
-  --error: #f25138; /* text on black, 5.9:1 */
+  --error: #ff5a4f; /* text on black, 6.8:1 (the same as the student app) */
   --error-fill: #e11900; /* white text on it, 4.8:1 */
   --go: #276ef1;
   --go-press: #1e54b7;
@@ -74,8 +74,8 @@ button:disabled {
   grid-template-areas: 'top' 'center' 'bottom';
   gap: 24px;
   height: 100%;
-  padding: env(safe-area-inset-top, 0px) calc(env(safe-area-inset-right, 0px) + 20px)
-    calc(env(safe-area-inset-bottom, 0px) + 24px) calc(env(safe-area-inset-left, 0px) + 20px);
+  padding: env(safe-area-inset-top, 0px) calc(env(safe-area-inset-right, 0px) + 16px)
+    calc(env(safe-area-inset-bottom, 0px) + 24px) calc(env(safe-area-inset-left, 0px) + 16px);
   /* OLED care: driver-screen.js moves everything by a few pixels every minute. */
   translate: var(--nudge-x, 0) var(--nudge-y, 0);
   transition: opacity 0.8s;
@@ -104,10 +104,12 @@ button:disabled {
 }
 
 .driver__app b {
-  margin-right: 6px;
+  margin-right: 8px;
   color: var(--text);
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  line-height: 24px;
+  letter-spacing: -0.03em; /* the same wordmark as the student and admin pages */
 }
 
 .driver__net {
@@ -127,16 +129,13 @@ button:disabled {
   background: var(--dim);
 }
 
-.driver__net[data-state='ok']::before {
-  background: var(--ok);
-}
-
+/* No internet during a shift is a warning: locations wait and are sent later. */
 .driver__net[data-state='bad'] {
-  color: var(--error);
+  color: var(--warn);
 }
 
 .driver__net[data-state='bad']::before {
-  background: var(--error);
+  background: var(--warn);
 }
 
 /* --- Caddy and status: left-aligned, one big line in the tone colour -------- */
@@ -170,6 +169,8 @@ button:disabled {
   max-width: 34ch;
 }
 
+/* "Driver status" 40/44: the one size outside the type scale, read at a
+   glance from the driver's seat (also used by GO). */
 .driver__head {
   display: block;
   color: var(--dim);
@@ -248,7 +249,7 @@ button:disabled {
   border-radius: 8px;
   background: var(--fill);
   color: var(--text);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 500;
 }
 
@@ -293,8 +294,6 @@ button:disabled {
 
   .driver__name {
     margin-bottom: 16px;
-    font-size: 28px;
-    line-height: 32px;
   }
 
   .driver__head {

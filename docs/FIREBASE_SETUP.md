@@ -127,7 +127,7 @@ On the admin page, under **Caddies**, add each caddy: number `1`, name
 2. Tap the name **SNU Caddy** at the top **5 times quickly**. The setup screen
    opens.
 3. On the admin page, under **Link a driver phone**, choose the caddy and
-   click **Create setup QR**.
+   click **Create setup code**.
 4. On the phone, tap **Scan QR code** and point the camera at the QR. (Or
    scan the QR with the phone's normal camera app; it opens the link.)
 5. The phone shows the black driver screen with the caddy name. Done. The
@@ -137,7 +137,7 @@ On the admin page, under **Caddies**, add each caddy: number `1`, name
    Tap **Go offline** twice when done.
 
 To unlink a phone (lost, replaced): admin page → **Linked phones** →
-**Revoke**.
+**Unlink**.
 
 ## Step 10: Students
 

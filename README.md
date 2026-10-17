@@ -75,7 +75,7 @@ local IP address (for example `192.168.1.20`) and open
 | `admin.html` | Admins | `…/admin.html` (SNU account on the admin list) |
 
 To link a driver phone: on the phone, tap the name **SNU Caddy** at the top
-**5 times quickly**, then scan the setup QR from the admin page.
+**5 times quickly**, then scan the setup QR code from the admin page.
 
 ## Driver screen (daily use)
 
@@ -113,7 +113,7 @@ shows an "API KEY REQUIRED" watermark. The project key is already in
 
 ## Demo / pitch mode
 
-Tap **Start demo** (or the **Demo** switch). Three virtual caddies drive real
+Tap **Try the demo** on the sign-in panel (or the **Demo** switch). Three virtual caddies drive real
 SNU roads, and a fourth caddy is parked and offline:
 
 | Caddy | Route | Shows |
@@ -136,7 +136,7 @@ updated, and one of four states:
 | **Offline** | The driver went offline, or the phone lost its connection |
 
 Live data runs only while the app is on screen, on campus and signed in.
-After 5 minutes without a touch it pauses ("Live updates paused. Tap to
+After 5 minutes without a touch it pauses ("Live map paused. Tap to
 resume.") and closes its database connection.
 
 Each virtual caddy acts like a real driver phone. It makes one GPS fix per
@@ -175,7 +175,7 @@ The demo is repeatable: it uses a fixed random seed, so every pitch looks the sa
 ```
 index.html              student app (map, sign-in, geofence, hidden driver setup)
 driver.html             OLED-black driver screen (linked phones only)
-admin.html              admin dashboard (fleet, setup QR codes, linked phones)
+admin.html              admin dashboard (fleet, setup codes, linked phones)
 manifest.webmanifest    PWA install data
 database.rules.json     Firebase security rules (the real access control)
 firebase.json           hosting, security headers, emulators
@@ -194,7 +194,7 @@ js/
   enroll.js             setup codes, QR scanner, atomic enrollment
   enroll-ui.js          hidden 5-tap setup dialog
   driver.js             driver binding (stored on the phone)
-  driver-screen.js      driver screen: GO, Online, Go offline, revoke check
+  driver-screen.js      driver screen: GO, Online, Go offline, unlink check
   driver-shift.js       shift engine: GPS filter, rate limit, onDisconnect, recovery
   admin.js              admin dashboard
   map.js                Leaflet map, campus lock, tile cross-fade

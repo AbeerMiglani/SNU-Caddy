@@ -9,6 +9,8 @@ import { NEAR_LANDMARK_M } from './config.js';
 import { LANDMARKS } from './data/campus.js';
 import { distanceM } from './lib/geo.js';
 
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
 /** "Near Central Library", or a plain fallback when nothing is close. */
 export function placeLabel(p) {
   let best = null;
@@ -112,7 +114,9 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
       setText(row.line, c.line ?? '');
       const when = timeAgo(c.ts, now);
       const age = { offline: `last seen ${when}`, lost: `last update ${when}` }[c.state];
-      setText(row.meta, `${placeLabel(c)} · ${age ?? `updated ${when}`}`);
+      // No-break spaces: when the line wraps, "updated 5 s ago" stays in one piece.
+      const ageText = (age ?? `updated ${when}`).replace(/ /g, '\u00a0');
+      setText(row.meta, `${placeLabel(c)} · ${ageText}`);
       setText(row.state, STATE_TEXT[c.state] ?? c.state);
       row.btn.dataset.state = c.state;
       row.btn.classList.toggle('is-selected', c.id === selectedId);
@@ -125,7 +129,13 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
     const moving = count('moving');
     const online = moving + count('parked');
     const lost = count('lost');
-    const parts = [online === 0 ? 'No caddies online' : `${online} online · ${moving} moving`];
+    const parts = [
+      online === 0
+        ? 'No caddies online'
+        : moving
+          ? `${online} online · ${moving} moving`
+          : `${online} online`,
+    ];
     if (lost) parts.push(`${lost} signal lost`);
     setText(summary, note ?? parts.join(' · '));
     setText(summaryStatus, note ?? parts[0].replace(/ · \d+ moving$/, ''));
@@ -144,7 +154,10 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
     const box = list.parentElement;
     if (!row || !box) return;
     const offset = row.li.getBoundingClientRect().top - box.getBoundingClientRect().top;
-    box.scrollTo({ top: box.scrollTop + offset - 4, behavior: 'smooth' });
+    box.scrollTo({
+      top: box.scrollTop + offset - 4,
+      behavior: reducedMotion.matches ? 'auto' : 'smooth',
+    });
   }
 
   return { render, reveal };

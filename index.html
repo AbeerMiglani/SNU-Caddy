@@ -72,13 +72,10 @@
     <link rel="stylesheet" href="css/app.css" />
   </head>
   <body>
-    <div id="map" role="region" aria-label="Campus map"></div>
-
-    <!-- Top bar: wordmark (5 quick taps open the hidden driver setup) and map theme. -->
+    <!-- Top bar: wordmark (5 quick taps open the hidden driver setup) and theme. -->
     <header class="topbar">
       <div class="topbar__brand">
         <span class="wordmark" id="brand">SNU Caddy</span>
-        <span class="tag" id="demo-banner" hidden>Demo</span>
       </div>
       <!-- Each tap cycles Auto -> Light (Positron) -> Dark (Dark Matter). -->
       <button class="icon-btn" id="theme-btn" type="button">
@@ -95,10 +92,12 @@
         <svg class="icon icon--dark" viewBox="0 0 24 24" aria-hidden="true">
           <path class="fill" d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />
         </svg>
-        <span class="sr-only">Map theme: </span>
+        <span class="sr-only">Theme: </span>
         <span class="icon-btn__label" id="theme-label">Auto</span>
       </button>
     </header>
+
+    <div id="map" role="region" aria-label="Campus map"></div>
 
     <!-- Map button: frame the whole campus. It floats above the sheet. -->
     <button class="map-btn" id="recenter-btn" type="button" aria-label="Show the whole campus">
@@ -110,7 +109,7 @@
 
     <!-- Idle pause: live updates stop after a few minutes without a touch. -->
     <button class="snackbar" id="paused" type="button" hidden>
-      Live updates paused. Tap to resume.
+      Live map paused. Tap to resume.
     </button>
 
     <!-- Bottom sheet (side panel on wide screens) -->
@@ -118,15 +117,14 @@
       <button
         class="sheet__grab"
         type="button"
-        aria-expanded="false"
         aria-controls="sheet-body"
-        aria-label="Expand caddy list"
+        aria-label="Show more caddies"
       >
         <span class="sheet__handle" aria-hidden="true"></span>
       </button>
       <div class="sheet__header">
         <div>
-          <h1 class="sheet__title" id="sheet-title">Caddies</h1>
+          <h1 class="sheet__title" id="sheet-title" tabindex="-1">Caddies</h1>
           <p class="sheet__summary" id="summary">No caddies online</p>
           <!-- Screen readers hear only the online count and notes, not every Moving/Parked change. -->
           <p class="sr-only" id="summary-status" role="status"></p>
@@ -140,7 +138,7 @@
         <!-- Geofence / location card (Phase 2). Replaces the list while shown. -->
         <div class="gate" id="gate" hidden>
           <div role="status">
-            <p class="gate__title" id="gate-title"></p>
+            <p class="gate__title" id="gate-title" tabindex="-1"></p>
             <p class="gate__text" id="gate-text"></p>
           </div>
           <button class="btn btn--primary" id="gate-action" type="button"></button>
@@ -148,7 +146,6 @@
         <ul class="list" id="caddy-list" hidden></ul>
         <div class="empty" id="empty">
           <p class="empty__text">A caddy shows here when its driver taps GO.</p>
-          <button class="btn btn--secondary" id="empty-demo" type="button">Start demo</button>
         </div>
         <p class="account" id="account" hidden>
           <span id="account-email"></span>
@@ -164,7 +161,7 @@
           <div class="login__copy">
             <h2 class="login__title" id="login-title" tabindex="-1">Find a caddy on campus</h2>
             <p class="login__text">
-              Sign in with your SNU Google account to see where each caddy is now.
+              Sign in with your @snu.edu.in Google account to see where each caddy is now.
             </p>
           </div>
           <div class="login__actions">
@@ -173,24 +170,23 @@
               Continue with Google
             </button>
             <button class="btn btn--secondary" id="login-demo" type="button">Try the demo</button>
-            <p class="login__note">Only @snu.edu.in accounts can sign in.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Hidden driver-phone setup: 5 quick taps on the logo (Phase 2). -->
+    <!-- Hidden driver-phone setup: 5 quick taps on the name "SNU Caddy" (Phase 2). -->
     <dialog class="enroll" id="enroll" aria-labelledby="enroll-title">
       <form class="enroll__inner" id="enroll-form" novalidate>
-        <h2 class="enroll__title" id="enroll-title">Set up a driver phone</h2>
+        <h2 class="enroll__title" id="enroll-title">Link a driver phone</h2>
         <p class="enroll__text">
-          For SNU Caddy admins. Scan the setup QR from the admin page, or type the setup code.
+          For SNU Caddy admins. Scan the QR code on the admin page, or type the setup code.
         </p>
         <div class="enroll__scan" id="enroll-scan" hidden>
           <video id="enroll-video" muted playsinline></video>
           <span class="enroll__frame" aria-hidden="true"></span>
         </div>
-        <button class="btn btn--primary" id="enroll-scan-btn" type="button">Scan QR code</button>
+        <button class="btn btn--secondary" id="enroll-scan-btn" type="button">Scan QR code</button>
         <label class="enroll__field">
           <span>Setup code</span>
           <input

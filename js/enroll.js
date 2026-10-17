@@ -83,19 +83,21 @@ export async function checkSetupCode(fb, code) {
   try {
     await waitConnected(fb);
   } catch {
-    throw new EnrollError('No connection. Check the internet and try again.');
+    throw new EnrollError('No connection. Check your internet and try again.');
   }
   const snap = await D.get(D.ref(db, `enrollCodes/${code}`));
   if (!snap.exists()) {
-    throw new EnrollError('This setup code does not exist. Check it, or make a new one.');
+    throw new EnrollError(
+      'This setup code does not exist. Check it, or create a new one on the admin page.',
+    );
   }
   const info = snap.val();
   if (info.usedBy) {
-    throw new EnrollError('This setup code was already used. Make a new one on the admin page.');
+    throw new EnrollError('This setup code was already used. Create a new one on the admin page.');
   }
   const offset = (await readOnce(fb, '.info/serverTimeOffset')).val() ?? 0;
   if (info.expiresAt <= Date.now() + offset) {
-    throw new EnrollError('This setup code has expired. Make a new one on the admin page.');
+    throw new EnrollError('This setup code has expired. Create a new one on the admin page.');
   }
   return info;
 }
@@ -130,7 +132,9 @@ export async function claimSetupCode(fb, code, info) {
     });
   } catch {
     // Someone used the code a moment earlier, or it expired just now.
-    throw new EnrollError('The code was not accepted. Make a new one and try again.');
+    throw new EnrollError(
+      'The setup code was not accepted. Create a new one on the admin page and try again.',
+    );
   }
 
   const name = await D.get(D.ref(db, `fleet/${info.caddyId}/name`))
