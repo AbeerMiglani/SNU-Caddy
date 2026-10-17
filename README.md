@@ -24,8 +24,11 @@ python3 -m http.server 8000
 
 Then open:
 
-- <http://localhost:8000/>: the app. Until `js/firebase-config.js` has your
-  Firebase config, it runs without login (map + demo only).
+- <http://localhost:8000/>: the app, connected to the SNU Firebase project
+  (`snu-caddy-45q9r`) that `js/firebase-config.js` holds. It needs an
+  `@snu.edu.in` sign-in and a phone on campus. For local work, use
+  `?demo=1`, or `?emulator=1` with the emulators (below). Set
+  `FIREBASE_CONFIG` to `null` for map + demo only, without login.
 - <http://localhost:8000/?demo=1>: demo mode starts at once
 - <http://localhost:8000/?demo=1&speed=2>: demo at 2x speed (0.5 to 5)
 
@@ -49,7 +52,7 @@ The automated tests start their own emulator, so stop `npm run emulators`
 (Ctrl-C) first:
 
 ```bash
-npm test                   # 32 security-rule tests + 36 unit tests
+npm test                   # 32 security-rule tests + 39 unit tests
 npm run test:unit          # only the unit tests (no Java needed)
 ```
 
@@ -154,7 +157,9 @@ The demo is repeatable: it uses a fixed random seed, so every pitch looks the sa
   geofence re-checks stop, and the database connection closes.
 - **Idle pause**: after 5 minutes without a touch, live updates stop and the
   database connection closes. A tap resumes them.
-- **Service worker**: repeat visits load the app from the phone; it opens in dead zones too.
+- **Service worker**: keeps a copy of the app, so it opens in a dead zone, and a weak
+  signal never stalls it for more than 4 s. App files are checked with Hosting on each
+  visit (mostly small "not changed" answers), so a new version is used at once.
 - **Geofence**: one quick, low-accuracy location check when the app opens, then one
   every 5 minutes while it stays on screen. No continuous GPS on student phones.
 - **Driver phones** open `driver.html`: no map, no tiles, no Leaflet, pure black.
@@ -178,7 +183,7 @@ css/
 js/
   main.js               student app: connects everything
   config.js             all settings: campus box, tiles, GPS rules, geofence, demo
-  firebase-config.js    YOUR Firebase web config (public values)
+  firebase-config.js    Firebase web config of the SNU project (public values)
   firebase.js           loads the Firebase SDK on demand; emulator mode
   auth.js               Google sign-in, @snu.edu.in check
   student-gate.js       login -> geofence -> live data
@@ -205,7 +210,7 @@ js/
   data/demo-routes.js   GENERATED: demo routes on real roads
 sw.js                   service worker: app shell for dead zones (never live data)
 tests/database.rules.test.mjs   32 security-rule tests (npm test)
-tests/driver-shift.test.mjs     28 shift-engine tests: fake GPS, database, timers
+tests/driver-shift.test.mjs     31 shift-engine tests: fake GPS, database, timers
 tests/sw.test.mjs               the service worker saves every module it needs
 tests/csp.test.mjs              the CSP allows exactly the inline scripts (by hash)
 tests/modulepreload.test.mjs    keeps the preload lists in index.html and driver.html in sync

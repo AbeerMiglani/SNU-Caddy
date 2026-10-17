@@ -52,7 +52,8 @@ You do **not** need a credit card. Stay on the **Spark** plan.
 
 ## Step 5: Put the config in the app
 
-Open `js/firebase-config.js` and replace `null` with your values:
+Open `js/firebase-config.js` and replace the values with your project's values
+(the file ships with the SNU project, `snu-caddy-45q9r`):
 
 ```js
 export const FIREBASE_CONFIG = {

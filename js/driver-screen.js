@@ -4,11 +4,11 @@
 // anonymous account that the one-time QR setup linked to one caddy. An admin's
 // "Revoke" reaches the phone within a second and stops the shift.
 
-import { DRIVER, GEOFENCE } from './config.js';
+import { DRIVER, GEOFENCE, LIVE } from './config.js';
 import { CAMPUS_POLYGON } from './data/campus.js';
 import { CADDY_ID_RE, clearBinding, readBinding, saveBinding } from './driver.js';
 import { createShift } from './driver-shift.js';
-import { FIREBASE_ON, SDK, loadFirebase } from './firebase.js';
+import { FIREBASE_ON, SDK, firebaseLoadFailed, loadFirebase } from './firebase.js';
 import { distanceOutsideM } from './lib/polygon.js';
 import { createWakeLock } from './lib/wake-lock.js';
 
@@ -18,6 +18,8 @@ const CONFIRM_OFF_MS = 4000;
 /** A warning must last this long before it lights a dimmed screen (no flicker). */
 const WARN_WAKE_MS = 10_000;
 const RETRY_MS = 20_000;
+/** No confirmed write for this long: warn the driver before students see "Signal lost". */
+const STALE_MS = LIVE.signalLostMs - 30_000;
 const NOT_LINKED = 'This phone is no longer linked. Ask an admin for a new setup code.';
 
 const $ = (id) => document.getElementById(id);
@@ -84,8 +86,15 @@ async function boot(link) {
       setBoot('Firebase is not set up yet (docs/FIREBASE_SETUP.md).', 'warn', null);
       return;
     }
-    setBoot('No connection. This phone stays linked. It tries again by itself.', 'warn', 'bad');
-    retryWhenOnline();
+    if (firebaseLoadFailed()) {
+      setBoot('No connection. This phone stays linked. It tries again by itself.', 'warn', 'bad');
+      retryWhenOnline(RETRY_MS);
+    } else {
+      // A setup error (for example a bad web config). Keep retrying slowly, so
+      // the phone recovers by itself when the fixed app is published.
+      setBoot('Setup problem. Tell an admin. This phone stays linked.', 'error', null);
+      retryWhenOnline(60_000);
+    }
     return;
   }
 
@@ -128,6 +137,10 @@ async function boot(link) {
     ui.pausedHint = true;
     persist.clear();
     render();
+    // No ghost caddy: if that shift's connection dropped before onDisconnect
+    // was registered, the caddy would stay "online". (A missing or already
+    // offline caddy makes this a no-op; the rules refuse it quietly.)
+    fb.D.update(fb.D.ref(fb.db, `caddies/${link.caddyId}`), { online: false }).catch(() => {});
   }
 
   watchLink(fb, user, link);
@@ -237,7 +250,7 @@ function setBoot(text, tone, net) {
  * reload. The "online" event alone is not enough (a phone with mobile data
  * but no real connection counts as online all the time).
  */
-function retryWhenOnline() {
+function retryWhenOnline(everyMs) {
   els.retry.hidden = false;
   const probe = async () => {
     if (document.visibilityState !== 'visible') return;
@@ -248,7 +261,7 @@ function retryWhenOnline() {
       /* still no connection */
     }
   };
-  setInterval(probe, RETRY_MS);
+  setInterval(probe, everyMs);
   window.addEventListener('online', probe);
 }
 
@@ -395,7 +408,7 @@ function statusLine(s) {
   }
   if (s.gps === 'approximate') {
     return [
-      'Location is not precise. Turn on “Precise location” for Chrome: phone Settings → Apps → Chrome → Permissions → Location.',
+      'Location is not precise. Turn on “Precise location” for Chrome in the phone settings.',
       'error',
     ];
   }
@@ -415,6 +428,12 @@ function statusLine(s) {
       : ['GPS is weak. Students see your last good position.', 'warn'];
   }
   if (s.sentAt === null) return ['Sending your location…', 'dim'];
+  // The connection looks up, but the server has not confirmed a write for a
+  // while (a half-open connection in a weak-signal spot): say so before
+  // students see "Signal lost".
+  if (Date.now() - s.sentAt > STALE_MS) {
+    return ['Not reaching the server. Your location is sent when the signal is back.', 'warn'];
+  }
   return ['Online & broadcasting', 'ok'];
 }
 

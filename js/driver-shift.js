@@ -99,6 +99,16 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     // A new connection has no onDisconnect yet. (The server runs the old one
     // when it notices that the old connection is gone.)
     armed = false;
+    if (up && state.mode === 'on' && issued) {
+      // The caddy node exists: register at once, not only after the next
+      // confirmed write. If the link drops again before that write is
+      // confirmed, the caddy still goes offline. (If the node does not
+      // exist yet, the rules refuse this, and the write's success arms it.)
+      armed = true;
+      store.armDisconnect().catch(() => {
+        armed = false;
+      });
+    }
     if (up && state.mode === 'on' && state.gps !== 'outside') {
       want ??= 'reconnect'; // dead-zone recovery: the newest fix goes out at once
       pump();
@@ -290,7 +300,9 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   function tick() {
     if (state.mode !== 'on') return;
     const t = now();
-    if (lastFixAt && t - lastFixAt > DRIVER.gpsLostMs && state.gps !== 'lost') {
+    // "outside" stays until a sharp fix is back on campus: no fix proves nothing.
+    const quiet = lastFixAt && t - lastFixAt > DRIVER.gpsLostMs;
+    if (quiet && state.gps !== 'lost' && state.gps !== 'outside') {
       state.gps = 'lost';
       emit();
     }
@@ -301,7 +313,10 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
       const verdict = gate.check({ ...good, t });
       if (verdict.send) want ??= verdict.reason;
       pump();
-    } else {
+    } else if (!lastFixAt || t - lastFixAt > DRIVER.fixFreshMs) {
+      // The watch went quiet (some browsers report only changes): ask once.
+      // While it still sends (blurry) fixes, an extra request would only
+      // cost battery.
       askOneFix();
     }
   }

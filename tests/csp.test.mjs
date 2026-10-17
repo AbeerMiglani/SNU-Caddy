@@ -38,6 +38,17 @@ test('every inline script is allowed by its hash, and nothing else is inline', (
 
 test('the policy is strict', () => {
   assert.deepEqual(directive('default-src'), ["'self'"]);
+  // CDNs only with the exact package and version: a CDN must not be able to
+  // serve any other package to these pages.
+  for (const origin of [
+    'https://unpkg.com',
+    'https://cdn.jsdelivr.net',
+    'https://www.gstatic.com',
+  ]) {
+    for (const name of ['script-src', 'style-src', 'img-src', 'connect-src']) {
+      assert.ok(!directive(name).includes(origin), `${name} allows all of ${origin}`);
+    }
+  }
   assert.deepEqual(directive('object-src'), ["'none'"]);
   assert.deepEqual(directive('frame-ancestors'), ["'none'"]);
   for (const name of ['script-src', 'style-src']) {

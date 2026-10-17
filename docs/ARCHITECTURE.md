@@ -45,7 +45,7 @@ flowchart LR
 | Service worker | `sw.js` | Opens the app shell in dead zones; never caches live data |
 | Admin dashboard | `admin.html`, `js/admin.js` | SNU accounts on the admin list |
 | Security rules | `database.rules.json` | Enforced by Firebase on every read and write |
-| Tests | `tests/*.test.mjs` | 32 rules tests in the emulator + 36 unit tests (`npm test`) |
+| Tests | `tests/*.test.mjs` | 32 rules tests in the emulator + 39 unit tests (`npm test`) |
 
 ## 2. Roles and sign-in
 
@@ -170,12 +170,13 @@ place of the last move. So GPS noise cannot make a parked caddy "move".
 | ------ | ------------------- |
 | GO | Screen Wake Lock on, GPS watch on. The first sharp fix creates or overwrites the caddy object. |
 | First confirmed write on a connection | Registers `onDisconnect().update({ online: false })`. (The rules accept it only for an existing caddy object, so it comes after the write.) |
-| Connection lost (dead zone) | No writes and no queue. The server runs `onDisconnect`: students see the caddy offline. |
-| Connection back | The newest fix goes out at once with `online: true`, then `onDisconnect` is registered again. |
+| Connection lost (dead zone) | No new writes. At most one write that was already in flight stays in the SDK. The server runs `onDisconnect`: students see the caddy offline. |
+| Connection back | `onDisconnect` is registered again at once. The SDK re-sends the in-flight write (its server times resolve now, so the old place shows for about 1 s); about 1 s after its answer, the newest fix goes out with `online: true`. |
+| Connection "up" but writes get no answer (half-open link) | After 60 s without a confirmed write, the driver screen says "Not reaching the server" (students see "Signal lost" at 90 s). |
 | Old connection's `onDisconnect` runs late | Every position write carries `online: true`, so the next write (at most 30 s later) corrects it. |
 | Outside campus | No positions; `online: false` once. Back inside: the next fix makes it online again. |
 | App in the background | The browser stops GPS and timers. Students see "Signal lost" after 90 s. Back within 10 min: the shift continues. After 10 min: the shift ends, so a forgotten phone leaves no ghost caddy. |
-| Reload or crash during a shift | The shift resumes by itself if it was alive in the last 10 min. Otherwise the screen says why GO is back. |
+| Reload or crash during a shift | The shift resumes by itself if it was alive in the last 10 min. Otherwise the screen says why GO is back, and the phone sets its caddy `online: false` (no ghost caddy, even if the old connection dropped before `onDisconnect` was registered). |
 | Go offline while the first write still waits (dead socket) | `online: false` is still sent; the SDK delivers it after the waiting write, so the caddy ends offline. |
 | Go offline (two taps) | `online: false`, then `onDisconnect` cancelled; GPS and wake lock off. |
 | Admin revokes the phone | The `drivers/{uid}` listener fires: the shift stops at once, the phone returns to the student app. The admin page sets `online: false`. |
@@ -208,7 +209,7 @@ with a new `lastUpdated`, at most once per second.
 
 The rules are tested with the Firebase Emulator: 32 tests, one per attack
 or allowed action, including the exact writes a driver phone makes in a
-shift (`npm test`). The shift engine has 28 more tests with a fake GPS, a
+shift (`npm test`). The shift engine has 31 more tests with a fake GPS, a
 fake database and fake timers; other tests keep the service worker list,
 the CSP hashes and the preload lists in sync (`npm run test:unit`, no
 emulator needed).
@@ -218,11 +219,14 @@ emulator needed).
 Firebase Hosting sends a strict CSP with every page (`firebase.json`):
 
 - `default-src 'self'`; no `unsafe-inline`, no `unsafe-eval`. The four small
-  inline scripts (driver redirect, module preload, theme before first paint,
-  admin theme) are allowed by their SHA-256 hash only. `tests/csp.test.mjs`
-  fails when one of them changes.
-- Scripts: this site, the pinned CDNs (Leaflet on unpkg, Firebase SDK on
-  gstatic, jsQR and qrcode-generator on jsDelivr), Google sign-in
+  inline scripts (index.html: driver redirect + module preload, and theme
+  before first paint; driver.html: redirect back to the student app;
+  admin.html: theme) are allowed by their SHA-256 hash only.
+  `tests/csp.test.mjs` fails when one of them changes.
+- Scripts: this site, the exact package paths on the CDNs
+  (`unpkg.com/leaflet@1.9.4/`, `www.gstatic.com/firebasejs/12.19.0/`,
+  `cdn.jsdelivr.net/npm/jsqr@1.4.0/`, `cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/`;
+  never a whole CDN, which could serve any package), Google sign-in
   (`apis.google.com`), and the database hosts (needed only by the
   long-polling fallback on networks that block WebSockets).
 - Images: this site, CARTO and OpenStreetMap tiles. Frames: the project's
@@ -236,8 +240,11 @@ flow (sign-in, live map, idle pause, demo, offline reload), the driver
 flow and the admin flow ran with **no CSP violations**.
 
 The service worker (`sw.js`) uses **network first** for the app files (a
-new version is used at once; the saved copy only offline or after 4 s on a
-weak signal) and **cache first** for the version-pinned CDN files. It never
+new version is used at once). A page opens from the saved copy only when
+the network fails or takes more than 4 s; that page then also gets its
+modules from the saved copy, so one page never mixes two versions after a
+deploy. The version-pinned CDN files are **cache first**. It keeps one
+saved copy per page (query strings such as `?demo=1` share it) and never
 touches live data, sign-in, Firebase's `/__/` pages or map tiles.
 
 ## 6. Threat model
@@ -270,7 +277,7 @@ touches live data, sign-in, Firebase's `/__/` pages or map tiles.
 | New accounts | 100 per hour per IP address | Campus Wi-Fi shares IP addresses, so plan a staggered launch. The app shows a clear "try again in a few minutes" message. |
 | Email-link sign-in | 5 emails/day | Not used. |
 | Daily active users | 3,000/day **only** if the project is upgraded to "Identity Platform" | Do **not** upgrade. Standard Firebase Auth is enough. |
-| Hosting | 10 GB storage, 360 MB/day transfer | App files are about 200 KB, and the service worker serves repeat visits from the phone. Leaflet and the Firebase SDK come from public CDNs. |
+| Hosting | 10 GB storage, 360 MB/day transfer | App files are about 200 KB and are sent with `no-cache`, so repeat visits are mostly small "not changed" (304) answers. The service worker copy is used only when the network fails or is slow. Leaflet and the Firebase SDK come from public CDNs. |
 | CARTO basemap tiles | 5 million requests/month (non-commercial key) | Tiles are cached for 30 days by the browser. |
 
 If SNU grows past 100 viewers at the same moment, the next step is the
@@ -302,6 +309,8 @@ but it needs a billing account. That is a decision for SNU IT.
 | Driver denies location | The shift does not start; the screen explains how to allow location in Chrome. |
 | Driver leaves campus during a shift | Location not shared; the caddy shows offline until it is back. |
 | Screen Wake Lock refused (battery saver) | The screen says the screen can turn off; every tap tries again. |
+| A bad value in the published web config | Students see "SNU Caddy has a setup problem"; driver phones say "Setup problem. Tell an admin" and try again every minute, so they recover by themselves when a fixed version is published. |
+| A student phone becomes a driver phone (5 taps) | The student is signed out and the phone is linked; the database connection is opened again for the link. |
 | Installed iPhone app (standalone) | Sign-in uses a full-page redirect instead of a popup. |
 | No Google Play Services | Nothing in the app needs them: web OAuth, W3C Geolocation, WebSocket. |
 

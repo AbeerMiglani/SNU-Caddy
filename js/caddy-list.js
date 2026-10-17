@@ -39,9 +39,11 @@ function setText(el, text) {
 
 /**
  * @param {{ list: HTMLElement, empty: HTMLElement, summary: HTMLElement,
- *           onSelect: (id: string) => void }} els
+ *           summaryStatus: HTMLElement, onSelect: (id: string) => void }} els
+ *   `summaryStatus` is a status region: it changes only with the online count
+ *   or a note, so screen readers do not hear every Moving / Parked change.
  */
-export function createCaddyList({ list, empty, summary, onSelect }) {
+export function createCaddyList({ list, empty, summary, summaryStatus, onSelect }) {
   /** @type {Map<string, any>} */
   const rows = new Map();
 
@@ -127,6 +129,7 @@ export function createCaddyList({ list, empty, summary, onSelect }) {
     const parts = [online === 0 ? 'No caddies online' : `${online} online · ${moving} moving`];
     if (lost) parts.push(`${lost} signal lost`);
     setText(summary, note ?? parts.join(' · '));
+    setText(summaryStatus, note ?? parts[0].replace(/ · \d+ moving$/, ''));
 
     empty.hidden = sorted.length > 0;
     list.hidden = sorted.length === 0;

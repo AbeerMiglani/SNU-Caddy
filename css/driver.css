@@ -64,7 +64,8 @@ button:disabled {
 /* --- Layout ---------------------------------------------------------------- */
 .driver {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  /* minmax(0, 1fr): a long message may not push Go offline off the screen. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas: 'top' 'center' 'bottom';
   gap: 20px;
   height: 100%;
@@ -128,7 +129,9 @@ button:disabled {
 
 .driver__center {
   grid-area: center;
-  align-self: center;
+  align-self: safe center;
+  max-height: 100%;
+  overflow-y: auto;
   text-align: center;
 }
 
@@ -290,7 +293,7 @@ button:disabled {
 @media (orientation: landscape) and (max-height: 560px) {
   .driver {
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas: 'top top' 'center bottom';
     column-gap: 28px;
     row-gap: 14px;
@@ -309,6 +312,16 @@ button:disabled {
   .driver__beacon {
     width: min(26vh, 110px);
     margin: 10px auto;
+  }
+
+  /* Little height: a warning or an error needs the room more than the beacon. */
+  .driver[data-tone='error'] .driver__beacon,
+  .driver[data-tone='warn'] .driver__beacon {
+    display: none;
+  }
+
+  .driver[data-mode='on'] .driver__status {
+    font-size: 18px;
   }
 
   .driver__off {

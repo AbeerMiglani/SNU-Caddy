@@ -1,16 +1,26 @@
-// SNU Caddy service worker: the app opens even in a campus dead zone, and
-// repeat visits load faster.
+// SNU Caddy service worker: the app opens even in a campus dead zone, and a
+// weak signal never stalls it for more than 4 s.
 //
-//  - App files (same origin): NETWORK FIRST, so a new version is used at once.
-//    The saved copy is used only when the network fails or is too slow.
+//  - Pages (same origin): NETWORK FIRST, so a new version is used at once.
+//    The saved copy is used only when the network fails or is too slow; the
+//    files of such a page then come from the same saved copy.
+//  - Other app files: network first, the saved copy only when the network fails.
 //  - Versioned libraries (Leaflet, Firebase SDK, QR tools): CACHE FIRST. Their
 //    URLs contain the version, so a saved copy never goes out of date.
 //  - Everything else is not touched: live caddy data, sign-in, map tiles and
 //    Firebase's own /__/ pages always go to the network. Live data must never
 //    come from a cache.
 
-const CACHE = 'snu-caddy-v1';
-const SLOW_MS = 4000; // weak signal: use the saved copy after this long
+const CACHE = 'snu-caddy-v2';
+const SLOW_MS = 4000; // weak signal: open the saved page after this long
+
+/**
+ * Pages (client ids) that opened from the saved copy. Their modules come from
+ * the same copy, so one page never mixes an old and a new version after a
+ * deploy. (The set is lost when the browser stops this worker; then a late,
+ * lazy module of such a page comes from the network, which is still fine.)
+ */
+const savedPages = new Set();
 
 /** App shell. Keep in sync with the app's modules (tests/sw.test.mjs checks it). */
 const SHELL = [
@@ -94,46 +104,89 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
     if (url.pathname.startsWith('/__/')) return; // Firebase sign-in pages and config
-    event.respondWith(networkFirst(event, req));
+    event.respondWith(req.mode === 'navigate' ? openPage(event, url) : appFile(event));
   } else if (LIB_PREFIXES.some((p) => req.url.startsWith(p))) {
-    event.respondWith(cacheFirst(req));
+    event.respondWith(cacheFirst(event));
   }
   // Anything else (tiles, database, sign-in): the browser handles it normally.
 });
 
-async function networkFirst(event, req) {
+/** A page: the network, unless it fails or is slower than SLOW_MS and a saved copy exists. */
+async function openPage(event, url) {
   const cache = await caches.open(CACHE);
-  const fromNetwork = fetch(req).then(async (res) => {
-    if (res.ok && res.type === 'basic') await cache.put(req, res.clone());
+  // One saved copy per page: ?demo=1, ?emulator=1 and #enroll= links share it.
+  const key = url.origin + url.pathname;
+  const fromNetwork = fetch(event.request).then((res) => {
+    if (res.ok && res.type === 'basic') {
+      event.waitUntil(cache.put(key, res.clone()).catch(() => {}));
+    }
     return res;
   });
-  // Keep the service worker alive until the saved copy is updated.
-  event.waitUntil(fromNetwork.catch(() => {}));
-  // The page URL may carry ?demo=1 or ?emulator=1: match the saved page without it.
-  const saved = () => cache.match(req, { ignoreSearch: req.mode === 'navigate' });
+  event.waitUntil(
+    fromNetwork.then(
+      () => {},
+      () => {},
+    ),
+  );
+  const saved = async () => {
+    const copy = await cache.match(key);
+    if (copy) {
+      savedPages.add(event.resultingClientId);
+      forgetClosedPages();
+    }
+    return copy;
+  };
   let timer;
   const slow = new Promise((resolve) => {
-    timer = setTimeout(async () => resolve(await saved()), SLOW_MS);
-  });
+    timer = setTimeout(resolve, SLOW_MS);
+  }).then(saved);
   try {
     // The network wins, unless it is slow and a saved copy exists.
-    const res = await Promise.race([fromNetwork, slow.then((s) => s ?? fromNetwork)]);
-    return res;
-  } catch {
+    return await Promise.race([fromNetwork, slow.then((copy) => copy ?? fromNetwork)]);
+  } catch (err) {
     const copy = await saved();
     if (copy) return copy;
-    throw new Error('offline and not saved');
+    throw err;
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function cacheFirst(req) {
+/** A file of a page: from the saved copy for a saved page, else network first. */
+async function appFile(event) {
+  const req = event.request;
+  const cache = await caches.open(CACHE);
+  if (savedPages.has(event.clientId)) {
+    const copy = await cache.match(req);
+    if (copy) return copy;
+  }
+  try {
+    const res = await fetch(req);
+    if (res.ok && res.type === 'basic') {
+      // A failed save (for example storage full) must not fail a good answer.
+      event.waitUntil(cache.put(req, res.clone()).catch(() => {}));
+    }
+    return res;
+  } catch (err) {
+    const copy = await cache.match(req);
+    if (copy) return copy;
+    throw err;
+  }
+}
+
+async function cacheFirst(event) {
+  const req = event.request;
   const cache = await caches.open(CACHE);
   const saved = await cache.match(req);
   if (saved) return saved;
   const res = await fetch(req);
   // Only real CORS answers: subresource integrity (SRI) must be able to check them.
-  if (res.ok && res.type === 'cors') await cache.put(req, res.clone());
+  if (res.ok && res.type === 'cors') {
+    event.waitUntil(cache.put(req, res.clone()).catch(() => {}));
+  }
   return res;
+}
+
+async function forgetClosedPages() {
+  for (const id of savedPages) if (!(await self.clients.get(id))) savedPages.delete(id);
 }

@@ -30,8 +30,9 @@ let loading = null;
 let failed = false;
 
 /**
- * True after the SDK failed to download. Browsers remember a failed module
- * import for the rest of the page's life, so only a page reload can retry.
+ * True after the SDK failed to DOWNLOAD (no network). Browsers remember a
+ * failed module import for the rest of the page's life, so only a page reload
+ * can retry. False for a setup error (bad config): loadFirebase() rejects too.
  */
 export const firebaseLoadFailed = () => failed;
 
@@ -46,7 +47,12 @@ export function loadFirebase() {
       import(`${SDK}/firebase-app.js`),
       import(`${SDK}/firebase-auth.js`),
       import(`${SDK}/firebase-database.js`),
-    ]);
+    ]).catch((err) => {
+      failed = true; // See firebaseLoadFailed(): only a reload can retry.
+      throw err;
+    });
+    // From here on, an error is a setup problem (for example a bad value in
+    // js/firebase-config.js), not a missing network: firebaseLoadFailed() stays false.
     const app = appSdk.initializeApp(USE_EMULATOR ? EMULATOR_CONFIG : FIREBASE_CONFIG);
     // The session is kept in IndexedDB: signed in until sign-out. No popup /
     // redirect helper here: on phones the default one loads Google scripts and
@@ -60,10 +66,7 @@ export function loadFirebase() {
       D.connectDatabaseEmulator(db, '127.0.0.1', 9000);
     }
     return { auth, db, A, D };
-  })().catch((err) => {
-    failed = true; // See firebaseLoadFailed(): the UI offers a reload.
-    throw err;
-  });
+  })();
   return loading;
 }
 

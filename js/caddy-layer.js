@@ -186,7 +186,9 @@ export class CaddyLayer {
     it.state = c.state;
     it.name = c.name;
     it.el.dataset.state = c.state;
-    it.el.setAttribute('aria-label', `${c.name}, ${STATE_TEXT[c.state] ?? c.state}`);
+    const label = `${c.name}, ${STATE_TEXT[c.state] ?? c.state}`;
+    it.el.setAttribute('aria-label', label);
+    it.el.title = label; // the hover tooltip follows renames and state changes
     // Caddies a student can catch draw above the others.
     it.marker.setZIndexOffset({ lost: -500, offline: -1000 }[c.state] ?? 0);
   }

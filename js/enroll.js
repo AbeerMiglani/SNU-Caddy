@@ -111,6 +111,9 @@ export async function claimSetupCode(fb, code, info) {
   if (auth.currentUser && !auth.currentUser.isAnonymous) await A.signOut(auth);
   if (!auth.currentUser) await A.signInAnonymously(auth);
   const uid = auth.currentUser.uid;
+  // Signing a live student out makes the student map close the database
+  // connection (js/live.js detach -> goOffline). Open it again for the claim.
+  D.goOnline(db);
 
   try {
     // Not raced against a timeout: a queued write would still reach the server

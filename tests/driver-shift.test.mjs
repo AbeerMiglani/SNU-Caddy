@@ -551,6 +551,46 @@ test('resume after a reload keeps the shift start; the GPS search starts now', a
   assert.equal(db.positions.length, 1);
 });
 
+test('outside campus, then no GPS for a while: still "outside" (not "lost")', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  geo.fix(OFF_CAMPUS);
+  await wait(30_000, 1000);
+  assert.equal(last().gps, 'outside');
+});
+
+test('heartbeat: no extra GPS request while the watch still sends (blurry) fixes', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  for (let s = 0; s < 60; s++) {
+    geo.fix(HOME, 35); // the watch is alive, only blurry
+    await wait(1000, 500);
+  }
+  assert.equal(geo.oneShots.length, 0);
+  assert.equal(db.positions.length, 1, 'a blurry fix is never sent as a heartbeat');
+});
+
+test('reconnect: onDisconnect is registered at once, before the recovery write', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  db.setConnected(false);
+  await wait(3000);
+  geo.fix(offsetM(HOME, 20, 0));
+  const before = db.log.length;
+  db.setConnected(true);
+  await flush();
+  assert.deepEqual(
+    db.log.slice(before).map(([k]) => k),
+    ['arm', 'position'],
+  );
+});
+
 test('the campus fence plus its margin lies inside the database rules box', () => {
   // The rules reject positions outside a lat/lng box. The phone stops sharing
   // at the fence + margin, so that line must be inside the box everywhere.

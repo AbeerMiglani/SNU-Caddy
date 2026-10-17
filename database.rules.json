@@ -42,12 +42,13 @@
         // force a caddy offline or delete its state.
         ".write": "(auth != null && newData.exists() && root.child('drivers').child(auth.uid).child('caddyId').val() === $caddyId) || (auth != null && auth.token.email_verified === true && auth.token.email.matches(/.*@snu\\.edu\\.in$/i) && root.child('admins').child(auth.uid).val() === true)",
         ".validate": "root.child('fleet').child($caddyId).exists() && newData.hasChildren(['lat', 'lng', 'accuracy', 'online', 'lastUpdated'])",
-        // Positions must be on (or next to) campus. This also protects the
-        // driver's privacy: the phone cannot publish a location off campus.
+        // Positions must be on (or next to) campus: the box around the campus
+        // fence plus 100 m (the phone stops sharing at the fence + 100 m; the
+        // box is the server-side backstop for the driver's privacy).
         // A GPS field (lat, lng, bearing, accuracy) may change only together
         // with a new lastUpdated, so the 1-per-second limit below always applies.
-        "lat": { ".validate": "newData.isNumber() && newData.val() >= 28.516 && newData.val() <= 28.536 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
-        "lng": { ".validate": "newData.isNumber() && newData.val() >= 77.563 && newData.val() <= 77.586 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
+        "lat": { ".validate": "newData.isNumber() && newData.val() >= 28.5168 && newData.val() <= 28.5348 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
+        "lng": { ".validate": "newData.isNumber() && newData.val() >= 77.5668 && newData.val() <= 77.5827 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
         "bearing": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
         "accuracy": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
         "online": { ".validate": "newData.isBoolean()" },

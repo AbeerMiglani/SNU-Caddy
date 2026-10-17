@@ -125,8 +125,10 @@ function createUi(dialog) {
     if (busy || !FIREBASE_ON) return;
     setBusy(true);
     say('Checking the setup code…');
+    let fb = null;
+    let linked = false;
     try {
-      const fb = await loadFirebase();
+      fb = await loadFirebase();
       // 1. Check the code first: a typo must not sign a student out.
       const info = await checkSetupCode(fb, code);
       const current = fb.auth.currentUser;
@@ -142,6 +144,7 @@ function createUi(dialog) {
       // 2. Claim it.
       say('Linking this phone…');
       const result = await claimSetupCode(fb, code, info);
+      linked = true;
       saveBinding(result);
       say(`Linked to ${result.name}. Opening the driver screen…`, 'ok');
       setTimeout(() => location.replace(`driver.html${location.search}`), 900);
@@ -156,6 +159,11 @@ function createUi(dialog) {
       else say('Linking did not work. Try again, or make a new code.', 'error');
     } finally {
       setBusy(false);
+      // The code check opened a database connection. Without a link, and with
+      // no live map using it, close it again (the free plan allows 100).
+      if (!linked && fb && document.documentElement.dataset.live !== 'true') {
+        fb.D.goOffline(fb.db);
+      }
     }
   }
 

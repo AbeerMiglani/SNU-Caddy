@@ -252,6 +252,15 @@ export class DemoSimulator {
   resume() {
     if (!this.running || this.timer) return;
     this.timer = setInterval(() => this.tick(), DEMO.gpsTickMs);
+    // After a pause, send a fresh fix at once (like a phone that comes back),
+    // so the caddies never flash "Signal lost" while the next tick is due.
+    const now = Date.now();
+    for (const c of this.caddies) {
+      if (!c.lastSent) continue;
+      c.gate.reset();
+      if (c.v > 0.5) c.movedAt = now;
+      this.emitFix(c, now);
+    }
   }
 
   tick() {

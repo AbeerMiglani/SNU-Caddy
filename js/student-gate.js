@@ -180,7 +180,8 @@ export function createStudentGate(els, { onLive, onChange }) {
 
   function scheduleRecheck() {
     clearTimeout(recheckTimer);
-    if (document.hidden || !signedIn() || demo) return;
+    // Idle pause: no GPS checks for a phone that nobody looks at.
+    if (document.hidden || !signedIn() || demo || paused) return;
     if (fence?.kind === 'inside' || fence?.kind === 'outside') {
       recheckTimer = setTimeout(() => checkFence(), GEOFENCE.recheckMs);
     }
@@ -195,7 +196,7 @@ export function createStudentGate(els, { onLive, onChange }) {
       updateLive();
       return;
     }
-    if (signedIn() && !demo && Date.now() - fenceAt > GEOFENCE.recheckMs) checkFence();
+    if (signedIn() && !demo && !paused && Date.now() - fenceAt > GEOFENCE.recheckMs) checkFence();
     else scheduleRecheck();
     updateLive();
   });
@@ -235,7 +236,11 @@ export function createStudentGate(els, { onLive, onChange }) {
       fb = await loadFirebase();
     } catch (err) {
       authKnown = true;
-      showLoginError('Can’t reach SNU Caddy. Check your internet, then tap Continue to try again.');
+      showLoginError(
+        firebaseLoadFailed()
+          ? 'Can’t reach SNU Caddy. Check your internet, then tap Continue to try again.'
+          : 'SNU Caddy has a setup problem. Please tell the SNU IT team.',
+      );
       render();
       throw err;
     }
@@ -273,7 +278,11 @@ export function createStudentGate(els, { onLive, onChange }) {
     },
     /** Idle pause (main.js): no touch for a few minutes stops live data. */
     setPaused(on) {
+      if (paused === on) return;
       paused = on;
+      if (on) clearTimeout(recheckTimer);
+      else if (signedIn() && !demo && Date.now() - fenceAt > GEOFENCE.recheckMs) checkFence();
+      else scheduleRecheck();
       updateLive();
     },
     get live() {

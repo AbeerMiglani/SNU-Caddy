@@ -39,6 +39,7 @@ const list = createCaddyList({
   list: $('#caddy-list'),
   empty: $('#empty'),
   summary: $('#summary'),
+  summaryStatus: $('#summary-status'),
   onSelect: select,
 });
 
@@ -59,7 +60,9 @@ function scheduleRender() {
 function renderNow() {
   clearTimeout(renderTimer);
   renderTimer = 0;
-  $('#sheet').classList.toggle('is-loading', liveStatus === 'connecting' && !demo.running);
+  // Connecting, paused or refused: no "No caddies online right now" card.
+  const noCard = liveStatus === 'connecting' || liveStatus === 'denied' || idlePaused;
+  $('#sheet').classList.toggle('is-loading', noCard && !demo.running);
   if (list.render(caddies, selectedId, summaryNote())) sheet.refresh();
 }
 
@@ -177,14 +180,18 @@ function setIdlePaused(on) {
   if (idlePaused === on) return;
   idlePaused = on;
   gate?.setPaused(on);
-  $('#paused').hidden = !on;
+  const chip = $('#paused');
+  // A hidden button loses keyboard / screen-reader focus: keep it in the sheet.
+  if (!on && document.activeElement === chip) $('.sheet__grab').focus({ preventScroll: true });
+  chip.hidden = !on;
   renderNow();
 }
 function markActive() {
   lastTouch = Date.now();
   setIdlePaused(false);
 }
-for (const type of ['pointerdown', 'keydown', 'wheel']) {
+// 'click' too: screen readers activate controls without pointer events.
+for (const type of ['pointerdown', 'keydown', 'wheel', 'click']) {
   document.addEventListener(type, markActive, { capture: true, passive: true });
 }
 function checkIdle() {
