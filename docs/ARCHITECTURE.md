@@ -122,7 +122,7 @@ dashboard (expired ones at once, used ones after 24 hours).
 | Moving | `online` and data less than 90 s old and `movedAt` less than 60 s old | Normal icon, green dot |
 | Parked | `online` and data less than 90 s old, no real move for 60 s | Normal icon, blue dot |
 | Signal lost | `online`, but no data for 90 s or more | Dimmed icon, amber dot |
-| Offline | `online` is `false` (Go offline, or `onDisconnect`) | Grey icon, "last seen …" |
+| Offline | `online` is `false` (Go offline, or `onDisconnect`) | Grey icon, "Last seen …" |
 
 A "real move" is decided on the driver phone: GPS speed of at least 1 m/s,
 or (without speed) at least 10 m and more than the error radius from the

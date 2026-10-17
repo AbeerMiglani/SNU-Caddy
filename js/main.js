@@ -69,6 +69,7 @@ function renderNow() {
   const changed = sheetEl.classList.contains('is-loading') !== loading;
   sheetEl.classList.toggle('is-loading', loading);
   if (list.render(caddies, selectedId, summaryNote()) || changed) sheet.refresh();
+  else sheet.refit(); // a row's place / age now wraps to two lines, or no longer does
 }
 
 /** A sheet summary that replaces the caddy count, or null. */
@@ -131,6 +132,19 @@ function clearSelection() {
 }
 
 mapApi.map.on('click', clearSelection);
+
+// Keyboard or pointer? Leaflet focuses the map on every tap, so the map's focus
+// ring (app.css) shows only after Tab.
+document.addEventListener(
+  'keydown',
+  (e) => e.key === 'Tab' && document.documentElement.classList.add('kbd'),
+  true,
+);
+document.addEventListener(
+  'pointerdown',
+  () => document.documentElement.classList.remove('kbd'),
+  true,
+);
 $('#recenter-btn').addEventListener('click', () => mapApi.fitCampus(sheet.cover()));
 
 // --- Live data from Firebase ------------------------------------------------------
@@ -158,6 +172,7 @@ const gate = FIREBASE_ON
         cardText: $('#gate-text'),
         cardAction: $('#gate-action'),
         listTitle: $('#sheet-title'),
+        list: $('#caddy-list'),
         account: $('#account'),
         accountEmail: $('#account-email'),
         signOut: $('#sign-out'),
@@ -173,8 +188,8 @@ const gate = FIREBASE_ON
         },
         onChange: () => {
           $('#sheet').classList.toggle('is-gated', !$('#gate').hidden);
+          renderNow(); // sets the summary ('' under a card) before the sheet is measured
           sheet.refresh();
-          renderNow();
         },
       },
     )
