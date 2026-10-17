@@ -10,6 +10,8 @@ It is a mobile web app (PWA): plain HTML, CSS and JavaScript, with no build step
 | 3 | OLED-black driver screen: GO → Online & broadcasting → Go offline, GPS throttling, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
 | 4 | Live caddies on the student map (Moving / Parked / Signal lost / Offline), idle pause, service worker, strict CSP | Done |
 
+- **Live app:** <https://snu-caddy-45q9r.firebaseapp.com> (same site:
+  <https://snu-caddy-45q9r.web.app>). Admin page: `/admin.html`.
 - **For the SNU IT department:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
   (system design, security rules, threat model, free-tier budget, edge cases).
 - **Set up Firebase (free Spark plan):** [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).

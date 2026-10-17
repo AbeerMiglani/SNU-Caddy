@@ -3,6 +3,7 @@
     "rules": "database.rules.json"
   },
   "hosting": {
+    "site": "snu-caddy-45q9r",
     "public": ".",
     "cleanUrls": false,
     "ignore": [
