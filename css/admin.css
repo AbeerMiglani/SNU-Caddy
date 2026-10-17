@@ -296,6 +296,9 @@ code {
 
 /* --- Linked phones -------------------------------------------------------------- */
 .table-wrap {
+  /* Containing block: the sr-only "Action" header is clipped here and cannot
+     widen the page. */
+  position: relative;
   overflow-x: auto;
   /* Room for the Unlink button's focus ring; the button stays on the page edge. */
   margin-right: -6px;
@@ -338,9 +341,13 @@ code {
   font-weight: 500;
 }
 
-.table td:first-child,
-.table td:nth-child(3) {
+/* The date and the time each stay whole (caddy names wrap: they are free text). */
+.table td:nth-child(3) > span {
   white-space: nowrap;
+}
+
+.table td:nth-child(2) {
+  min-width: 96px;
 }
 
 .muted {

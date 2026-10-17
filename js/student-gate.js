@@ -42,7 +42,7 @@ const CARDS = {
   },
   denied: {
     title: 'Location is blocked',
-    text: 'Caddies show only on campus, so SNU Caddy needs your location. Allow location for this site in your browser settings, then tap Try again.',
+    text: 'Caddies show only on campus, so SNU Caddy needs your location. It stays on this phone. Allow location for this site in your browser settings, then tap Try again.',
     action: 'Try again',
   },
   unavailable: {
@@ -81,7 +81,7 @@ function recall(key) {
  *   login: HTMLElement, loginButton: HTMLButtonElement, loginTitle: HTMLElement,
  *   loginError: HTMLElement,
  *   card: HTMLElement, cardTitle: HTMLElement, cardText: HTMLElement, cardAction: HTMLButtonElement,
- *   listTitle: HTMLElement,
+ *   listTitle: HTMLElement, list: HTMLElement,
  *   account: HTMLElement, accountEmail: HTMLElement, signOut: HTMLButtonElement,
  *   behindLogin: HTMLElement[],
  * }} els
@@ -122,6 +122,7 @@ export function createStudentGate(els, { onLive, onChange }) {
   function render() {
     const had = document.activeElement;
     const loginWasOpen = !els.login.hidden;
+    const panelWasReady = loginShown; // the sign-in button was on screen, not the splash
     const cardWasOpen = !els.card.hidden;
     // Until Firebase knows the session, the login screen is a plain splash (no flash of
     // the sign-in button for students who are already signed in).
@@ -152,11 +153,22 @@ export function createStudentGate(els, { onLive, onChange }) {
     }
     // A control that disappears takes the focus with it (to <body>). Put it on the
     // next thing to read: the location card when it shows, else the caddy list.
+    // (Not on a normal load: the splash before it had nothing to focus.)
     const lostLogin =
-      loginWasOpen && els.login.hidden && (had === document.body || els.login.contains(had));
+      loginWasOpen &&
+      els.login.hidden &&
+      (els.login.contains(had) || (had === document.body && panelWasReady));
     const lostCard = cardWasOpen && els.card.hidden && els.card.contains(had);
     if (lostLogin || lostCard) {
       (els.card.hidden ? els.listTitle : els.cardTitle).focus({ preventScroll: true });
+    } else if (
+      !cardWasOpen &&
+      !els.card.hidden &&
+      (had === els.listTitle || els.list.contains(had))
+    ) {
+      // The card appeared where the reader is (the list title right after sign-in,
+      // or a caddy row that the card now hides): move to the card, so it is read.
+      els.cardTitle.focus({ preventScroll: true });
     }
     updateLive();
     onChange?.();

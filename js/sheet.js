@@ -29,6 +29,7 @@ export function createSheet(sheet, { onChange } = {}) {
   let drag = null;
   let justDragged = false;
   let shrinkTimer = 0;
+  let peekRowH = 0; // height of the first row or card at the last measure()
 
   /** Bottom edge of the top bar (it grows with the phone's safe area). */
   const barBottom = () => document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 64;
@@ -40,6 +41,9 @@ export function createSheet(sheet, { onChange } = {}) {
     return { top, bottom: visible + gapPx, left: 0 };
   }
 
+  /** The peek shows the header plus this: the location card, the first row or the empty text. */
+  const firstItem = () => body.querySelector('.gate:not([hidden]), .row, .empty:not([hidden])');
+
   function measure() {
     const vh = window.innerHeight;
     gapPx = parseFloat(getComputedStyle(sheet).bottom) || 0;
@@ -47,7 +51,8 @@ export function createSheet(sheet, { onChange } = {}) {
     // fits the map attribution.
     const full = Math.max(240, vh - gapPx - barBottom() - 24);
     // Peek shows the header plus the first caddy row (or the whole location / empty card).
-    const firstRow = body.querySelector('.gate:not([hidden]), .row, .empty:not([hidden])');
+    const firstRow = firstItem();
+    peekRowH = firstRow?.offsetHeight ?? 0;
     let rowPart = 72;
     if (firstRow && !firstRow.classList.contains('row')) rowPart = firstRow.offsetHeight + 8;
     else if (firstRow) rowPart = Math.min(firstRow.offsetHeight, 132) + 12;
@@ -261,5 +266,9 @@ export function createSheet(sheet, { onChange } = {}) {
       }
     },
     cover,
+    /** Re-measure only when the first row or card changed height (its text now wraps). */
+    refit() {
+      if ((firstItem()?.offsetHeight ?? 0) !== peekRowH) this.refresh();
+    },
   };
 }
