@@ -98,6 +98,11 @@ export const DRIVER = {
   movingSpeedMs: 1,
   /** ... or, without speed, this far (and beyond the error radius) from the last move. */
   movingMinM: 10,
+  /**
+   * Charging ends only when the caddy moves AND is this far from where the
+   * driver set it: GPS drift of a parked phone must not end it.
+   */
+  chargeClearM: 30,
 };
 
 /** Student map: what each caddy's state means. */
@@ -138,6 +143,8 @@ export const DEMO = {
   /** Chance of a blurry fix (> 20 m), which the accuracy filter must drop. */
   badFixChance: 0.03,
   parkedMinutesAgo: 14,
+  /** One caddy is plugged in at a landmark (see LANDMARKS), so the pitch shows "Charging". */
+  charging: { id: 'caddy-05', name: 'Caddy 05', landmark: 'DH1', movedMinutesAgo: 25 },
 };
 
 /** Student / admin login: Google accounts on this domain only (enforced again in the database rules). */

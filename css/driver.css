@@ -23,6 +23,7 @@
   --warn: #ffc043;
   --error: #ff5a4f; /* text on black, 6.8:1 (the same as the student app) */
   --error-fill: #e11900; /* white text on it, 4.8:1 */
+  --charge: #a58df0; /* Charging: the student app's dark purple, 7.7:1 on black */
   --go: #276ef1;
   --go-press: #1e54b7;
   color-scheme: dark;
@@ -184,6 +185,10 @@ button:disabled {
   color: var(--ok);
 }
 
+.driver__status[data-tone='charging'] .driver__head {
+  color: var(--charge);
+}
+
 .driver__status[data-tone='warn'] .driver__head {
   color: var(--warn);
 }
@@ -217,6 +222,7 @@ button:disabled {
 .driver__bottom {
   grid-area: bottom;
   display: grid;
+  gap: 12px;
   place-items: center;
 }
 
@@ -242,6 +248,7 @@ button:disabled {
   color: #545454;
 }
 
+.driver__charge,
 .driver__off,
 .driver__retry {
   height: 56px;
@@ -253,13 +260,23 @@ button:disabled {
   font-weight: 500;
 }
 
+.driver__charge,
 .driver__off {
   width: 100%;
 }
 
+.driver__charge:active,
 .driver__off:active,
 .driver__retry:active {
   background: var(--fill-press);
+}
+
+/* Charging is on: the same grey button, with the purple as its text and an
+   outline (no new shape, no animation). Tap again to go back to Online. */
+.driver__charge[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px var(--charge);
+  color: var(--charge);
+  font-weight: 700;
 }
 
 /* Second tap needed: the button turns red. */

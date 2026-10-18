@@ -68,10 +68,12 @@ function fakeDb() {
     refuse: false,
     hold: null, // set to an array to keep position writes pending (a dead socket)
     moved: [],
-    sendPosition(f, { moved }) {
+    charging: [], // the charging flag of each position write
+    sendPosition(f, { moved, charging }) {
       d.log.push(['position', f]);
       d.positions.push(f);
       d.moved.push(moved);
+      d.charging.push(charging);
       if (d.hold) return new Promise((resolve) => d.hold.push(resolve));
       return d.refuse ? Promise.reject(new Error('PERMISSION_DENIED')) : Promise.resolve();
     },
@@ -551,6 +553,40 @@ test('resume after a reload keeps the shift start; the GPS search starts now', a
   assert.equal(db.positions.length, 1);
 });
 
+test('charging survives a reload: it is saved with the shift and the first write carries it', async () => {
+  const first = makeShift();
+  first.go();
+  geo.fix(HOME);
+  await flush();
+  assert.equal(persist.saved.charging, false);
+  first.setCharging(true);
+  assert.equal(persist.saved.charging, true, 'saved at once, not only at the next heartbeat');
+
+  // The page reloads: a new engine continues with what the screen read back.
+  const saved = persist.saved;
+  first.dispose();
+  db.positions.length = 0;
+  db.charging.length = 0;
+  const second = makeShift();
+  second.go({ since: saved.since, charging: saved.charging });
+  assert.equal(last().charging, true);
+  geo.fix(HOME);
+  await flush();
+  assert.deepEqual(db.charging, [true], 'students keep seeing Charging, not Parked');
+
+  // Driving off still clears it, and the save follows.
+  await wait(2100);
+  geo.fix(offsetM(HOME, 40, 0), 5, { heading: 0, speed: 4 });
+  await flush();
+  assert.equal(persist.saved.charging, false);
+});
+
+test('a shift saved without the flag (older app version) resumes as not charging', async () => {
+  const shift = makeShift();
+  shift.go({ since: Date.now() - 60_000, charging: undefined });
+  assert.equal(last().charging, false);
+});
+
 test('outside campus, then no GPS for a while: still "outside" (not "lost")', async () => {
   const shift = makeShift();
   shift.go();
@@ -591,6 +627,121 @@ test('reconnect: onDisconnect is registered at once, before the recovery write',
   );
 });
 
+// --- Charging ------------------------------------------------------------------
+test('charging: the toggle is written at once and the state follows', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  assert.equal(last().charging, false);
+  assert.equal(db.charging[0], false, 'the first write says not charging');
+
+  shift.setCharging(true);
+  assert.equal(last().charging, true);
+  assert.deepEqual(db.calls('fields'), [['fields', { charging: true }]]);
+  shift.setCharging(true);
+  assert.equal(db.calls('fields').length, 1, 'no second write for the same value');
+
+  shift.setCharging(false);
+  assert.equal(last().charging, false);
+  assert.deepEqual(db.calls('fields').at(-1), ['fields', { charging: false }]);
+});
+
+test('charging: not before a shift, and not before the caddy node exists', async () => {
+  const shift = makeShift();
+  shift.setCharging(true);
+  assert.equal(last().charging, false);
+  assert.equal(db.calls('fields').length, 0);
+
+  shift.go();
+  shift.setCharging(true); // no fix sent yet: the rules would refuse a lone flag
+  assert.equal(last().charging, true);
+  assert.equal(db.calls('fields').length, 0);
+  geo.fix(HOME);
+  await flush();
+  assert.equal(db.charging[0], true, 'the first position write carries it');
+});
+
+test('charging: heartbeats keep carrying the flag; the 30 s gap and write rules stay', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  for (let s = 0; s <= 65; s++) {
+    geo.fix(HOME);
+    await wait(1000, 500);
+  }
+  assert.equal(db.positions.length, 3, 'first fix + heartbeats at about 30 and 60 s');
+  assert.deepEqual(db.charging, [false, true, true]);
+  assert.deepEqual(db.moved, [false, false, false]);
+});
+
+test('charging while the connection is down: not queued; the next position write carries it', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  db.setConnected(false);
+  const before = db.log.length;
+  shift.setCharging(true);
+  assert.equal(last().charging, true, 'the screen shows it at once');
+  assert.equal(db.log.length, before, 'nothing is written while the connection is down');
+
+  await wait(3000); // the write gap (a recovery write is never within it)
+  db.setConnected(true);
+  await wait(3000);
+  assert.equal(db.positions.length, 2, 'the reconnect write');
+  assert.equal(db.charging.at(-1), true);
+});
+
+test('charging: driving off clears it, and that write carries charging:false', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  assert.equal(last().charging, true);
+
+  await wait(2100);
+  geo.fix(offsetM(HOME, 40, 0), 5, { heading: 0, speed: 4 }); // a real move
+  await flush();
+  assert.equal(db.positions.length, 2);
+  assert.equal(db.moved.at(-1), true);
+  assert.equal(db.charging.at(-1), false);
+  assert.equal(last().charging, false);
+});
+
+test('charging: GPS noise on a parked caddy does not clear it', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  await wait(2100);
+  geo.fix(offsetM(HOME, 6, 0), 5, { speed: 0.1 }); // past the 5 m deadband, but not moving
+  await flush();
+  assert.equal(db.positions.length, 2);
+  assert.equal(db.moved.at(-1), false);
+  assert.equal(db.charging.at(-1), true);
+  assert.equal(last().charging, true);
+});
+
+test('charging: a new shift starts as not charging', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  shift.stop('driver');
+  assert.equal(last().charging, false);
+  shift.go();
+  assert.equal(last().charging, false);
+  geo.fix(HOME);
+  await flush();
+  assert.equal(db.charging.at(-1), false);
+});
+
 test('the campus fence plus its margin lies inside the database rules box', () => {
   // The rules reject positions outside a lat/lng box. The phone stops sharing
   // at the fence + margin, so that line must be inside the box everywhere.
@@ -620,4 +771,39 @@ test('the campus fence plus its margin lies inside the database rules box', () =
       );
     }
   }
+});
+
+test('charging: slow GPS wander of a parked caddy (no speed value) does not clear it', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME, 6);
+  await flush();
+  shift.setCharging(true);
+  // 40 minutes of a parked phone whose fixes drift 0-14 m around the bay and report no speed.
+  for (let s = 1; s <= 2400; s++) {
+    const drift = 7 + 7 * Math.sin(s / 40);
+    geo.fix(offsetM(HOME, drift * Math.cos(s / 55), drift * Math.sin(s / 55)), 6);
+    await wait(1000, 500);
+  }
+  assert.ok(db.positions.length > 40, 'it kept sending heartbeats / moves');
+  assert.equal(last().charging, true);
+  assert.ok(db.charging.every((c, i) => i === 0 || c === true));
+});
+
+test('charging: driving off without a speed value clears it after about 30 m', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME, 6);
+  await flush();
+  shift.setCharging(true);
+  let p = HOME;
+  let cleared = null;
+  for (let s = 1; s <= 30 && cleared === null; s++) {
+    p = offsetM(p, 0, 4); // 4 m/s east, no speed field
+    geo.fix(p, 6);
+    await wait(1000, 500);
+    if (!last().charging) cleared = s;
+  }
+  assert.ok(cleared !== null && cleared <= 12, `cleared after ${cleared} s`);
+  assert.equal(db.charging.at(-1), false);
 });

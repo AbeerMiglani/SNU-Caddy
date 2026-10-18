@@ -128,6 +128,7 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
     const count = (state) => sorted.filter((c) => c.state === state).length;
     const moving = count('moving');
     const online = moving + count('parked');
+    const charging = count('charging');
     const lost = count('lost');
     const parts = [
       online === 0
@@ -136,6 +137,8 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
           ? `${online} online · ${moving} moving`
           : `${online} online`,
     ];
+    // A charging caddy is not one a student can catch: counted apart, like Signal lost.
+    if (charging) parts.push(`${charging} charging`);
     if (lost) parts.push(`${lost} signal lost`);
     setText(summary, note ?? parts.join(' · '));
     setText(summaryStatus, note ?? parts[0].replace(/ · \d+ moving$/, ''));

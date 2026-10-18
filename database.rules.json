@@ -52,6 +52,9 @@
         "bearing": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
         "accuracy": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20 && (newData.val() === data.val() || newData.parent().child('lastUpdated').val() === now)" },
         "online": { ".validate": "newData.isBoolean()" },
+        // Parked and plugged in (students see "Charging"). Optional. A flag, not a
+        // position: it can change on its own, without a new lastUpdated.
+        "charging": { ".validate": "newData.isBoolean()" },
         // Server time of the caddy's last real move (students see "Moving" or
         // "Parked"). Optional; it changes only together with a position write.
         "movedAt": { ".validate": "newData.isNumber() && (newData.val() === data.val() || (newData.val() === now && newData.parent().child('lastUpdated').val() === now))" },

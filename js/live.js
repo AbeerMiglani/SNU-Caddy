@@ -23,6 +23,7 @@ export function toRecord(id, v, name, offset) {
     id,
     name: name ?? nameFromId(id),
     online: v.online === true,
+    charging: v.charging === true,
     lat: v.lat,
     lng: v.lng,
     heading: isNum(v.bearing) ? v.bearing : null,
