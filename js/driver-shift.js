@@ -5,11 +5,13 @@
 //                 first fix, the caddy moved >= 5 m, or 30 s passed (heartbeat)
 //   connection    no writes while offline; on reconnect, send the newest fix
 //                 at once and register onDisconnect again (dead-zone recovery)
-//   Charging      a flag the driver toggles while on shift: the caddy is parked
-//                 and plugged in. Sent at once when the connection is up (never
-//                 queued while it is down); every position write carries it, so
-//                 the next one after a reconnect corrects it. A real move clears it.
-//   Go offline    online:false, GPS and wake lock off
+//   Charging      a flag the driver toggles while on shift (two taps on the
+//                 screen): the caddy is parked and plugged in. Sent at once when
+//                 the connection is up (never queued while it is down); every
+//                 position write carries it, so the next one after a reconnect
+//                 corrects it. A real move away from the charger clears it (its
+//                 place is saved with the shift, so a reload does not lose it).
+//   Go offline    online:false and charging:false, GPS and wake lock off
 //
 // The engine knows nothing about the page: the GPS, the database, the wake
 // lock and storage are passed in. tests/driver-shift.test.mjs drives it with
@@ -24,8 +26,8 @@ import { createPingGate } from './lib/ping-gate.js';
  * @property {(f: { lat: number, lng: number, accuracy: number, bearing?: number }, o: { moved: boolean, charging: boolean }) => Promise<void>} sendPosition
  *   One update with online:true, charging and lastUpdated = server time; with
  *   `moved`, also movedAt = server time.
- * @property {(f: object) => Promise<void>} setFields   A plain update ({ online: false }, { charging: true }).
- * @property {() => Promise<void>} armDisconnect        onDisconnect: online:false.
+ * @property {(f: object) => Promise<void>} setFields   A plain update ({ online: false, charging: false }, { charging: true }).
+ * @property {() => Promise<void>} armDisconnect        onDisconnect: online:false and charging:false.
  * @property {() => Promise<void>} cancelDisconnect
  * @property {(cb: (connected: boolean) => void) => () => void} onConnection
  *
@@ -44,6 +46,13 @@ import { createPingGate } from './lib/ping-gate.js';
 
 const round = (x, digits) => Number(x.toFixed(digits));
 const isNum = (x) => typeof x === 'number' && Number.isFinite(x);
+const place = (f) => (f ? { lat: f.lat, lng: f.lng, accuracy: f.accuracy } : null);
+/** A saved place counts only if it is a real one: three numbers, in range, from a sharp fix. */
+function asPlace(p) {
+  const ok = isNum(p?.lat) && isNum(p?.lng) && isNum(p?.accuracy);
+  const inRange = ok && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180;
+  return inRange && p.accuracy >= 0 && p.accuracy <= GPS_RULES.maxAccuracyM ? place(p) : null;
+}
 
 /**
  * @param {object} deps
@@ -83,7 +92,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let good = null; // newest sharp, on-campus fix
   let sent = null; // last fix the server confirmed
   let moveAnchor = null; // where the caddy was when it last counted as moving
-  let chargeAnchor = null; // where the caddy was when the driver set Charging
+  let chargeAnchor = null; // the charger: first fresh fix after Charging was set (saved with the shift)
   let bearing = null; // last known direction of travel
   let want = null; // why the next position write is needed; null = nothing to send
   let inFlight = false;
@@ -97,7 +106,13 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let hiddenAt = null;
 
   const emit = () => onChange?.({ ...state });
-  const save = () => persist.save({ since: state.since, charging: state.charging, aliveAt: now() });
+  const save = () =>
+    persist.save({
+      since: state.since,
+      charging: state.charging,
+      chargeAnchor: place(chargeAnchor),
+      aliveAt: now(),
+    });
 
   // --- Connection (also while idle, so the screen can show it) --------------
   const offConnection = store.onConnection((up) => {
@@ -178,11 +193,17 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     const moved = isMoving(fix);
     if (moved || !moveAnchor) moveAnchor = fix;
     if (state.charging) {
-      chargeAnchor ??= fix;
+      if (!chargeAnchor) {
+        chargeAnchor = fix;
+        save();
+      }
       // Driving off ends the charging stop; this write carries charging:false.
       // "Moved" alone is not enough: without a GPS speed, a parked phone's
       // drift counts as a move now and then (the 10 m test is for Moving).
-      if (moved && distanceM(chargeAnchor, fix) >= DRIVER.chargeClearM) {
+      // Nor is a fixed distance: two accepted fixes can each be 20 m off, so
+      // the caddy must also be farther away than their error radii together.
+      const clearM = Math.max(DRIVER.chargeClearM, chargeAnchor.accuracy + fix.accuracy);
+      if (moved && distanceM(chargeAnchor, fix) >= clearM) {
         state.charging = false;
         chargeAnchor = null;
         save();
@@ -371,7 +392,9 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   function setCharging(on) {
     if (state.mode !== 'on' || state.charging === on) return;
     state.charging = on;
-    chargeAnchor = on ? good : null;
+    // Anchor on a fresh fix only. After a GPS dead zone `good` is old: the
+    // caddy has moved since, so the next fresh fix (taken in send()) is the place.
+    chargeAnchor = on && good && now() - good.t <= DRIVER.fixFreshMs ? good : null;
     if (state.connected && issued) store.setFields({ charging: on }).catch(() => {});
     save(); // a reload mid-charge resumes as charging
     emit();
@@ -380,8 +403,9 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   // --- Shift ------------------------------------------------------------------
   /**
    * Start a shift. `resume` continues a shift after a reload, with its start
-   * time and whether it was charging (the first position write carries that).
-   * @param {{ since?: number, charging?: boolean }} [resume]
+   * time and whether it was charging (the first position write carries that)
+   * and where (a bad place is ignored: the first write then sets it).
+   * @param {{ since?: number, charging?: boolean, chargeAnchor?: object | null }} [resume]
    */
   function go(resume) {
     if (state.mode === 'on') return;
@@ -402,8 +426,10 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     gate.reset();
     good = null;
     sent = null;
-    moveAnchor = null;
-    chargeAnchor = null;
+    // Resumed charging: the saved place is also where the caddy last stood
+    // still, so the first fix can tell a drive-off even without a speed value.
+    chargeAnchor = state.charging ? asPlace(resume?.chargeAnchor) : null;
+    moveAnchor = chargeAnchor;
     bearing = null;
     want = 'start';
     failures = 0;
@@ -437,13 +463,13 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     tickTimer = pumpTimer = null;
     want = null;
     wake.release();
-    // A revoked phone may not write any more (the admin page set online:false).
+    // A revoked phone may not write any more (the admin page set online:false, charging:false).
     // `issued`, not "confirmed": a first write still waiting in the SDK reaches
     // the server later, and the online:false below must land after it.
     if (issued && reason !== 'revoked') {
       // Students first, then remove the server-side hook. Offline, the SDK
       // sends both when the phone reconnects (the server ran onDisconnect anyway).
-      store.setFields({ online: false }).catch(() => {});
+      store.setFields({ online: false, charging: false }).catch(() => {});
       store.cancelDisconnect().catch(() => {});
     }
     armed = false;
