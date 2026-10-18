@@ -83,6 +83,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let good = null; // newest sharp, on-campus fix
   let sent = null; // last fix the server confirmed
   let moveAnchor = null; // where the caddy was when it last counted as moving
+  let chargeAnchor = null; // where the caddy was when the driver set Charging
   let bearing = null; // last known direction of travel
   let want = null; // why the next position write is needed; null = nothing to send
   let inFlight = false;
@@ -96,8 +97,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let hiddenAt = null;
 
   const emit = () => onChange?.({ ...state });
-  const save = () =>
-    persist.save({ since: state.since, charging: state.charging, aliveAt: now() });
+  const save = () => persist.save({ since: state.since, charging: state.charging, aliveAt: now() });
 
   // --- Connection (also while idle, so the screen can show it) --------------
   const offConnection = store.onConnection((up) => {
@@ -177,11 +177,17 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     if (dir !== null) fields.bearing = dir;
     const moved = isMoving(fix);
     if (moved || !moveAnchor) moveAnchor = fix;
-    if (moved && state.charging) {
+    if (state.charging) {
+      chargeAnchor ??= fix;
       // Driving off ends the charging stop; this write carries charging:false.
-      state.charging = false;
-      save();
-      emit();
+      // "Moved" alone is not enough: without a GPS speed, a parked phone's
+      // drift counts as a move now and then (the 10 m test is for Moving).
+      if (moved && distanceM(chargeAnchor, fix) >= DRIVER.chargeClearM) {
+        state.charging = false;
+        chargeAnchor = null;
+        save();
+        emit();
+      }
     }
 
     store.sendPosition(fields, { moved, charging: state.charging }).then(
@@ -365,6 +371,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   function setCharging(on) {
     if (state.mode !== 'on' || state.charging === on) return;
     state.charging = on;
+    chargeAnchor = on ? good : null;
     if (state.connected && issued) store.setFields({ charging: on }).catch(() => {});
     save(); // a reload mid-charge resumes as charging
     emit();
@@ -396,6 +403,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     good = null;
     sent = null;
     moveAnchor = null;
+    chargeAnchor = null;
     bearing = null;
     want = 'start';
     failures = 0;

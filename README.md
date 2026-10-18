@@ -54,7 +54,7 @@ The automated tests start their own emulator, so stop `npm run emulators`
 (Ctrl-C) first:
 
 ```bash
-npm test                   # 35 security-rule tests + 56 unit tests
+npm test                   # 35 security-rule tests + 58 unit tests
 npm run test:unit          # only the unit tests (no Java needed)
 npm run test:e2e           # 5 browser tests: the 3 pages in Chromium under the real CSP
 ```
@@ -97,16 +97,17 @@ A linked phone opens straight into the black driver screen. No login.
    with one plain sentence (for example **No GPS signal**: Go to an open area).
 3. Parked and plugged in? Tap **Charging**. The headline turns purple and
    students see the caddy as **Charging**, still at its place on the map.
-   Tap **Charging** again to go back to **Online**. Driving off clears it by
-   itself, and so does a new shift. Location is still shared (the usual
-   30 s heartbeat).
+   Tap **Charging** again to go back to **Online**. Driving off (about 30 m
+   from where it was set) clears it by itself, and so does a new shift.
+   Location is still shared (the usual 30 s heartbeat).
 4. At the end of the shift, tap **Go offline** twice.
 
 **Charging needs the driver app left open.** The phone must keep the screen
 on (Screen Wake Lock). If the phone is locked or the app goes to the
 background, the GPS and the timers stop: students see **Signal lost** after
-90 s, and **Offline** after about 10 minutes (when the browser closes the
-connection and the shift ends). A charging phone that disconnects shows
+90 s. The caddy turns **Offline** only when the phone loses its connection
+(how soon depends on the phone), or when the driver opens the app again
+after more than 10 minutes. A charging phone that disconnects shows
 **Offline**, not **Charging**.
 
 What the phone sends: a position when the caddy moved 5 m, or every 30 s

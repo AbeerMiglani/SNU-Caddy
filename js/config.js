@@ -98,6 +98,11 @@ export const DRIVER = {
   movingSpeedMs: 1,
   /** ... or, without speed, this far (and beyond the error radius) from the last move. */
   movingMinM: 10,
+  /**
+   * Charging ends only when the caddy moves AND is this far from where the
+   * driver set it: GPS drift of a parked phone must not end it.
+   */
+  chargeClearM: 30,
 };
 
 /** Student map: what each caddy's state means. */

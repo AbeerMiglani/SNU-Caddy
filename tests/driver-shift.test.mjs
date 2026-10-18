@@ -576,7 +576,7 @@ test('charging survives a reload: it is saved with the shift and the first write
 
   // Driving off still clears it, and the save follows.
   await wait(2100);
-  geo.fix(offsetM(HOME, 10, 0), 5, { heading: 0, speed: 4 });
+  geo.fix(offsetM(HOME, 40, 0), 5, { heading: 0, speed: 4 });
   await flush();
   assert.equal(persist.saved.charging, false);
 });
@@ -704,7 +704,7 @@ test('charging: driving off clears it, and that write carries charging:false', a
   assert.equal(last().charging, true);
 
   await wait(2100);
-  geo.fix(offsetM(HOME, 10, 0), 5, { heading: 0, speed: 4 }); // a real move
+  geo.fix(offsetM(HOME, 40, 0), 5, { heading: 0, speed: 4 }); // a real move
   await flush();
   assert.equal(db.positions.length, 2);
   assert.equal(db.moved.at(-1), true);
@@ -771,4 +771,39 @@ test('the campus fence plus its margin lies inside the database rules box', () =
       );
     }
   }
+});
+
+test('charging: slow GPS wander of a parked caddy (no speed value) does not clear it', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME, 6);
+  await flush();
+  shift.setCharging(true);
+  // 40 minutes of a parked phone whose fixes drift 0-14 m around the bay and report no speed.
+  for (let s = 1; s <= 2400; s++) {
+    const drift = 7 + 7 * Math.sin(s / 40);
+    geo.fix(offsetM(HOME, drift * Math.cos(s / 55), drift * Math.sin(s / 55)), 6);
+    await wait(1000, 500);
+  }
+  assert.ok(db.positions.length > 40, 'it kept sending heartbeats / moves');
+  assert.equal(last().charging, true);
+  assert.ok(db.charging.every((c, i) => i === 0 || c === true));
+});
+
+test('charging: driving off without a speed value clears it after about 30 m', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME, 6);
+  await flush();
+  shift.setCharging(true);
+  let p = HOME;
+  let cleared = null;
+  for (let s = 1; s <= 30 && cleared === null; s++) {
+    p = offsetM(p, 0, 4); // 4 m/s east, no speed field
+    geo.fix(p, 6);
+    await wait(1000, 500);
+    if (!last().charging) cleared = s;
+  }
+  assert.ok(cleared !== null && cleared <= 12, `cleared after ${cleared} s`);
+  assert.equal(db.charging.at(-1), false);
 });

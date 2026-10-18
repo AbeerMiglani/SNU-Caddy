@@ -1,5 +1,11 @@
 # Plan: "Charging" driver status
 
+> **Status: implemented (PR #4).** This is the plan as written before review.
+> Some details changed during review (for example, Charging now ends only
+> when the caddy drives about 30 m away, and the cache version). Where this
+> file and `docs/ARCHITECTURE.md` differ, ARCHITECTURE describes the shipped
+> behaviour.
+
 ## Context
 
 Drivers need to tell students "this caddy is parked and plugged in, don't wait for it". Today a parked caddy shows as **Parked**, which reads as "available soon". Product decisions are fixed (see the request): one-tap toggle while Online, no return estimate, students see a 5th state "Charging" with the pin still shown, Signal lost and Offline win, location keeps heartbeating, OLED-black driver screen stays low-interaction.

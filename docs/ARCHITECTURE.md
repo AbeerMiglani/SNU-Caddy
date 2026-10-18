@@ -46,7 +46,7 @@ flowchart LR
 | Service worker | `sw.js` | Opens the app shell in dead zones; never caches live data |
 | Admin dashboard | `admin.html`, `js/admin.js` | SNU accounts on the admin list |
 | Security rules | `database.rules.json` | Enforced by Firebase on every read and write |
-| Tests | `tests/*.test.mjs`, `tests/e2e/` | 35 rules tests in the emulator + 56 unit tests (`npm test`); 5 browser tests under the real CSP (`npm run test:e2e`); both run in CI on every PR |
+| Tests | `tests/*.test.mjs`, `tests/e2e/` | 35 rules tests in the emulator + 58 unit tests (`npm test`); 5 browser tests under the real CSP (`npm run test:e2e`); both run in CI on every PR |
 
 ## 2. Roles and sign-in
 
@@ -137,9 +137,15 @@ Signal lost. `charging` is a flag the driver sets with one tap; the rules
 accept it as a boolean, on its own (it is not a position, so it needs no new
 `lastUpdated`). Every position write carries it, so a flag that was lost in a
 dead zone is corrected by the next heartbeat (at most 30 s). The toggle is
-written at once only while the connection is up (like every write, it is
-never queued while the connection is down). A real move clears it, and so do
-GO and Go offline. A reload during a shift keeps it (saved with the shift).
+written at once only while the connection is up and after the first position
+write has started; otherwise the next position write carries it. Driving off
+clears it: a real move that also takes the caddy 30 m or more from where the
+driver set it (`DRIVER.chargeClearM`; GPS drift of a parked phone, which can
+pass the 10 m Moving test now and then, does not). GO starts a shift as not
+charging (its first write says `charging: false`). Go offline sets only
+`online: false`; the `charging: true` left in the database is harmless,
+because Offline wins. A reload during a shift keeps the flag (saved with the
+shift).
 
 ## 4. Real-time data flow
 
@@ -192,7 +198,7 @@ GO and Go offline. A reload during a shift keeps it (saved with the shift).
 | App in the background | The browser stops GPS and timers. Students see "Signal lost" after 90 s. Back within 10 min: the shift continues. After 10 min: the shift ends, so a forgotten phone leaves no ghost caddy. |
 | Reload or crash during a shift | The shift resumes by itself if it was alive in the last 10 min. Otherwise the screen says why GO is back, and the phone sets its caddy `online: false` (no ghost caddy, even if the old connection dropped before `onDisconnect` was registered). |
 | Go offline while the first write still waits (dead socket) | `online: false` is still sent; the SDK delivers it after the waiting write, so the caddy ends offline. |
-| Charging tapped | `charging` is written at once (only while the connection is up). The driver app must stay open: if the phone is locked, students see "Signal lost" after 90 s and "Offline" after 10 min. |
+| Charging tapped | `charging` is written at once (only while the connection is up). The driver app must stay open: if the phone is locked, students see "Signal lost" after 90 s, and "Offline" only when the phone drops its connection (not on a timer) or when the driver reopens the app after 10 min. |
 | Go offline (two taps) | `online: false`, then `onDisconnect` cancelled; GPS and wake lock off. |
 | Admin unlinks the phone | The `drivers/{uid}` listener fires: the shift stops at once, the phone returns to the student app. The admin page sets `online: false`. |
 | Writes refused (for example the caddy was removed from the fleet) | Back-off (2, 4, 8 … 30 s); after 3 in a row the screen says "Ask an admin". |
@@ -224,7 +230,7 @@ with a new `lastUpdated`, at most once per second.
 
 The rules are tested with the Firebase Emulator: 35 tests, one per attack
 or allowed action, including the exact writes a driver phone makes in a
-shift (`npm test`). The shift engine has 40 more tests with a fake GPS, a
+shift (`npm test`). The shift engine has 42 more tests with a fake GPS, a
 fake database and fake timers; the map states have 4 tests, and other tests
 keep the service worker list, the CSP hashes, the preload lists and the
 pinned CDN versions in sync (`npm run test:unit`, no emulator needed). Five
@@ -338,7 +344,7 @@ but it needs a billing account. That is a decision for SNU IT.
 | ----- | ----- | ------ |
 | 1 | Uber-style map, bottom sheet, theme (Auto/Light/Dark), demo/pitch mode | Done |
 | 2 | Firebase project, `@snu.edu.in` login, geofence, QR device binding, admin dashboard, security rules + tests | Done |
-| 3 | Driver screen: GO → Online → Go offline, GPS gate, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
+| 3 | Driver screen: GO → Online (or Charging) → Go offline, GPS gate, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
 | 4 | Live caddies on the student map (Moving / Parked / Charging / Signal lost / Offline), connection management with idle pause, service worker (offline app shell), strict CSP | Done |
 
 ## 10. Design

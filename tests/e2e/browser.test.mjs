@@ -118,7 +118,9 @@ test('demo mode: the demo caddies on the map and in the list, nothing blocked', 
   for (const state of ['moving', 'charging', 'offline']) {
     assert.ok(states.includes(state), `no ${state} caddy in the demo: ${states}`);
   }
-  assert.match(await page.textContent('#summary'), /online/);
+  // A charging caddy is counted apart, not as online; the screen-reader line has only the count.
+  assert.match(await page.textContent('#summary'), /^\d+ online( · \d+ moving)? · 1 charging$/);
+  assert.doesNotMatch(await page.textContent('#summary-status'), /charging/);
   assert.ok(await page.isHidden('#login'), 'the sign-in panel hides in demo mode');
   assert.deepEqual(problems, []);
   await ctx.close();
@@ -153,7 +155,7 @@ test('a signed-in student on campus sees a live caddy', async () => {
   await ctx.close();
 });
 
-test('a driver phone links with a setup code, goes online, then offline', async () => {
+test('a driver phone links with a setup code, goes online, charges, then goes offline', async () => {
   const code = 'E2EABCDEFGHJKMNPQRSTVWXY';
   const now = Date.now();
   await db('PUT', 'fleet/caddy_02', { name: 'Caddy 02' });
@@ -181,6 +183,18 @@ test('a driver phone links with a setup code, goes online, then offline', async 
   assert.equal(caddy?.online, true);
   assert.ok(Math.abs(caddy.lat - LIBRARY.latitude) < 1e-5, JSON.stringify(caddy));
 
+  // Charging: one tap on, one tap off; the database follows.
+  await page.click('#driver-charge');
+  const charging = await until(async () => (await db('GET', 'caddies/caddy_02/charging')) === true);
+  assert.ok(charging, 'charging reached the database');
+  assert.equal(await page.textContent('#driver-head'), 'Charging');
+  assert.equal(await page.getAttribute('#driver-charge', 'aria-pressed'), 'true');
+  await page.click('#driver-charge');
+  const cleared = await until(async () => (await db('GET', 'caddies/caddy_02/charging')) === false);
+  assert.ok(cleared, 'charging cleared in the database');
+  assert.equal(await page.textContent('#driver-head'), 'Online');
+  assert.equal(await page.getAttribute('#driver-charge', 'aria-pressed'), 'false');
+
   // Go offline needs two taps.
   await page.click('#driver-off');
   assert.equal(await page.getAttribute('#driver', 'data-mode'), 'on');
@@ -188,6 +202,7 @@ test('a driver phone links with a setup code, goes online, then offline', async 
   const off = await until(async () => (await db('GET', 'caddies/caddy_02/online')) === false);
   assert.ok(off, 'the caddy is offline in the database');
   assert.equal(await page.textContent('#driver-head'), 'Offline');
+  assert.ok(await page.isHidden('#driver-charge'), 'no Charging button off shift');
   assert.deepEqual(problems, []);
   await ctx.close();
 });
