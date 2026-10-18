@@ -22,7 +22,7 @@ Dev URLs: `/?demo=1` (simulated caddies, no login; `&speed=2`), `/?emulator=1` o
 
 ## Architecture
 
-Three separate pages, each with its own entry module and CSS: `index.html` (students, `js/main.js`), `driver.html` (`js/driver.js` → `driver-screen.js` → `driver-shift.js`), `admin.html` (`js/admin.js`). Shared settings (campus box, GPS rules, geofence, CARTO key, demo) live in `js/config.js`.
+Three separate pages, each with its own entry module: `index.html` (students, `js/main.js`, `css/app.css`), `driver.html` (`js/driver-screen.js`, `css/driver.css`; it imports `driver-shift.js` and `driver.js`, the phone's localStorage binding, which the student page also imports through `enroll-ui.js`), `admin.html` (`js/admin.js`, `css/app.css` + `css/admin.css`). Shared settings (campus box, GPS rules, geofence, CARTO key, demo) live in `js/config.js`.
 
 - **Student flow:** `student-gate.js` chains Google sign-in (`auth.js`, `@snu.edu.in` only) → one-shot geofence (`geofence.js`, `lib/polygon.js`) → `live.js` (Firebase child events; closes the connection when the page is hidden or idle). `demo.js` feeds the same `caddy-layer.js`/`caddy-list.js` code from a simulator, so demo and live share rendering. `caddy-state.js` derives Moving / Parked / Signal lost / Offline.
 - **Driver flow:** drivers have no accounts. A phone gets an anonymous Firebase uid; an admin links it to a caddy via a single-use QR code (`enroll.js`, hidden 5-tap dialog in `enroll-ui.js`), written atomically as `drivers/{uid}` + `enrollCodes/{code}/usedBy`. `driver-shift.js` is the testable engine (GPS filter, rate limit via `lib/ping-gate.js`, `onDisconnect`, dead-zone recovery).
