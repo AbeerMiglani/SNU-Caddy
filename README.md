@@ -58,6 +58,8 @@ npm test                   # 32 security-rule tests + 39 unit tests
 npm run test:unit          # only the unit tests (no Java needed)
 ```
 
+CI: GitHub Actions runs `npm test` on every pull request and on every push to `main` (`.github/workflows/test.yml`).
+
 ### Open it on your phone
 
 Connect the phone and the computer to the same Wi-Fi. Find the computer's
