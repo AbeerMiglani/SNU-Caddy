@@ -64,7 +64,7 @@ export class CaddyLayer {
 
   /**
    * Add a caddy, apply a new ping, or show a new state (same ping, later time).
-   * @param {{ id: string, name: string, state: 'moving'|'parked'|'lost'|'offline',
+   * @param {{ id: string, name: string, state: 'moving'|'parked'|'charging'|'lost'|'offline',
    *           lat: number, lng: number, ts: number, heading?: number|null, speed?: number|null }} c
    */
   update(c) {
@@ -146,7 +146,7 @@ export class CaddyLayer {
 
   /** Caddies a student can catch draw above the others; the selected one above all. */
   setZ(it) {
-    const byState = { lost: -500, offline: -1000 }[it.state] ?? 0;
+    const byState = { charging: -250, lost: -500, offline: -1000 }[it.state] ?? 0;
     it.marker.setZIndexOffset(byState + (it.el.classList.contains('is-selected') ? 2000 : 0));
   }
 

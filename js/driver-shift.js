@@ -5,6 +5,10 @@
 //                 first fix, the caddy moved >= 5 m, or 30 s passed (heartbeat)
 //   connection    no writes while offline; on reconnect, send the newest fix
 //                 at once and register onDisconnect again (dead-zone recovery)
+//   Charging      a flag the driver toggles while on shift: the caddy is parked
+//                 and plugged in. Sent at once when the connection is up (never
+//                 queued while it is down); every position write carries it, so
+//                 the next one after a reconnect corrects it. A real move clears it.
 //   Go offline    online:false, GPS and wake lock off
 //
 // The engine knows nothing about the page: the GPS, the database, the wake
@@ -17,10 +21,10 @@ import { createPingGate } from './lib/ping-gate.js';
 
 /**
  * @typedef {object} Store  The caddy's database node, as the engine needs it.
- * @property {(f: { lat: number, lng: number, accuracy: number, bearing?: number }, o: { moved: boolean }) => Promise<void>} sendPosition
- *   One update with online:true and lastUpdated = server time; with `moved`,
- *   also movedAt = server time.
- * @property {(f: object) => Promise<void>} setFields   A plain update ({ online: false }).
+ * @property {(f: { lat: number, lng: number, accuracy: number, bearing?: number }, o: { moved: boolean, charging: boolean }) => Promise<void>} sendPosition
+ *   One update with online:true, charging and lastUpdated = server time; with
+ *   `moved`, also movedAt = server time.
+ * @property {(f: object) => Promise<void>} setFields   A plain update ({ online: false }, { charging: true }).
  * @property {() => Promise<void>} armDisconnect        onDisconnect: online:false.
  * @property {() => Promise<void>} cancelDisconnect
  * @property {(cb: (connected: boolean) => void) => () => void} onConnection
@@ -32,7 +36,8 @@ import { createPingGate } from './lib/ping-gate.js';
  * @property {number|null} accuracy   metres, newest fix (also a blurry one)
  * @property {number|null} sentAt     phone time of the last confirmed position write
  * @property {boolean} refused        the server refused several writes in a row
- * @property {number|null} since      shift start (phone time)
+ * @property {boolean} charging       the driver marked the caddy as charging
+ * @property {number|null} since     shift start (phone time)
  * @property {number|null} gpsSince   when this search for GPS started (GO or resume)
  * @property {null|'driver'|'paused'|'denied'|'revoked'} ended   why the last shift ended
  */
@@ -62,6 +67,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     accuracy: null,
     sentAt: null,
     refused: false,
+    charging: false,
     since: null,
     gpsSince: null,
     ended: null,
@@ -77,6 +83,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let good = null; // newest sharp, on-campus fix
   let sent = null; // last fix the server confirmed
   let moveAnchor = null; // where the caddy was when it last counted as moving
+  let chargeAnchor = null; // where the caddy was when the driver set Charging
   let bearing = null; // last known direction of travel
   let want = null; // why the next position write is needed; null = nothing to send
   let inFlight = false;
@@ -90,7 +97,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let hiddenAt = null;
 
   const emit = () => onChange?.({ ...state });
-  const save = () => persist.save({ since: state.since, aliveAt: now() });
+  const save = () => persist.save({ since: state.since, charging: state.charging, aliveAt: now() });
 
   // --- Connection (also while idle, so the screen can show it) --------------
   const offConnection = store.onConnection((up) => {
@@ -170,8 +177,20 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     if (dir !== null) fields.bearing = dir;
     const moved = isMoving(fix);
     if (moved || !moveAnchor) moveAnchor = fix;
+    if (state.charging) {
+      chargeAnchor ??= fix;
+      // Driving off ends the charging stop; this write carries charging:false.
+      // "Moved" alone is not enough: without a GPS speed, a parked phone's
+      // drift counts as a move now and then (the 10 m test is for Moving).
+      if (moved && distanceM(chargeAnchor, fix) >= DRIVER.chargeClearM) {
+        state.charging = false;
+        chargeAnchor = null;
+        save();
+        emit();
+      }
+    }
 
-    store.sendPosition(fields, { moved }).then(
+    store.sendPosition(fields, { moved, charging: state.charging }).then(
       () => {
         inFlight = false;
         ackAt = now();
@@ -342,10 +361,27 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   }
   doc.addEventListener('visibilitychange', onVisibility);
 
+  // --- Charging -----------------------------------------------------------------
+  /**
+   * Mark the caddy as charging (or not). Only on shift. The flag goes out at
+   * once if the connection is up and the caddy node exists; otherwise (or if
+   * the write is refused) the next position write carries it.
+   * @param {boolean} on
+   */
+  function setCharging(on) {
+    if (state.mode !== 'on' || state.charging === on) return;
+    state.charging = on;
+    chargeAnchor = on ? good : null;
+    if (state.connected && issued) store.setFields({ charging: on }).catch(() => {});
+    save(); // a reload mid-charge resumes as charging
+    emit();
+  }
+
   // --- Shift ------------------------------------------------------------------
   /**
-   * Start a shift. `resume` continues a shift after a reload, with its start time.
-   * @param {{ since?: number }} [resume]
+   * Start a shift. `resume` continues a shift after a reload, with its start
+   * time and whether it was charging (the first position write carries that).
+   * @param {{ since?: number, charging?: boolean }} [resume]
    */
   function go(resume) {
     if (state.mode === 'on') return;
@@ -358,6 +394,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
       accuracy: null,
       sentAt: null,
       refused: false,
+      charging: resume?.charging === true,
       since: resume?.since ?? t,
       gpsSince: t,
       ended: null,
@@ -366,6 +403,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     good = null;
     sent = null;
     moveAnchor = null;
+    chargeAnchor = null;
     bearing = null;
     want = 'start';
     failures = 0;
@@ -414,6 +452,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
       gps: 'waiting',
       accuracy: null,
       refused: false,
+      charging: false,
       gpsSince: null,
       ended: reason,
     });
@@ -432,6 +471,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   return {
     go,
     stop,
+    setCharging,
     dispose,
     get state() {
       return { ...state };

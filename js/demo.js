@@ -6,9 +6,10 @@
 //   3. The ping gate sends the fix only if it moved 5 m, or 30 s passed.
 // So the student map gets the same kind of data it gets from Firebase.
 // One caddy takes a long break at one stop, so the pitch shows "Moving",
-// "Parked" and (Caddy 04) "Offline".
+// "Parked", (Caddy 05) "Charging" and (Caddy 04) "Offline".
 
-import { DEMO } from './config.js';
+import { DEMO, GPS_RULES } from './config.js';
+import { LANDMARKS } from './data/campus.js';
 import { DEMO_PARKED, DEMO_ROUTES } from './data/demo-routes.js';
 import { bearingDeg, distanceM, lerpLatLng, offsetM } from './lib/geo.js';
 import { createPingGate } from './lib/ping-gate.js';
@@ -201,6 +202,7 @@ export class DemoSimulator {
     this.onRemove = onRemove;
     this.speed = Math.min(5, Math.max(0.5, Number(speed) || 1));
     this.caddies = [];
+    this.chargingAt = 0; // when the charging caddy last sent its heartbeat
     this.timer = 0;
     this.running = false;
     this.stats = { fixes: 0, sent: 0, dropped: { inaccurate: 0, deadband: 0 } };
@@ -228,6 +230,7 @@ export class DemoSimulator {
       speed: 0,
       ts: now - DEMO.parkedMinutesAgo * 60_000,
     });
+    this.emitCharging(now);
     for (const c of this.caddies) this.emitFix(c, now);
     // Started in a background tab (e.g. a ?demo=1 link)? The visibility
     // handler starts the clock when the page is shown.
@@ -240,6 +243,7 @@ export class DemoSimulator {
     this.running = false;
     for (const c of this.caddies) this.onRemove(c.id);
     this.onRemove(DEMO_PARKED.id);
+    this.onRemove(DEMO.charging.id);
     this.caddies = [];
   }
 
@@ -261,6 +265,7 @@ export class DemoSimulator {
       if (c.v > 0.5) c.movedAt = now;
       this.emitFix(c, now);
     }
+    this.emitCharging(now);
   }
 
   tick() {
@@ -273,6 +278,30 @@ export class DemoSimulator {
       if (c.v > 0.5) c.movedAt = now; // like the driver phone's movedAt
       this.emitFix(c, now);
     }
+    if (now - this.chargingAt >= GPS_RULES.heartbeatMs) this.emitCharging(now);
+  }
+
+  /**
+   * Caddy 05: plugged in at a landmark. It only sends the 30 s heartbeat,
+   * like a parked driver phone with the Charging button on.
+   */
+  emitCharging(now) {
+    const { id, name, landmark, movedMinutesAgo } = DEMO.charging;
+    const at = LANDMARKS.find((l) => l.name === landmark);
+    if (!at) return;
+    this.chargingAt = now;
+    this.onUpdate({
+      id,
+      name,
+      online: true,
+      charging: true,
+      movedAt: now - movedMinutesAgo * 60_000,
+      lat: at.lat,
+      lng: at.lng,
+      heading: 0,
+      speed: 0,
+      ts: now,
+    });
   }
 
   emitFix(c, now) {

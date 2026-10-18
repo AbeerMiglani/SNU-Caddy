@@ -1,4 +1,4 @@
-// The OLED-black driver screen: GO, then "Online", then Go offline.
+// The OLED-black driver screen: GO, then "Online" (or "Charging"), then Go offline.
 //
 // Pure black, no map, little lit text. The phone needs no login: it is the
 // anonymous account that the one-time QR setup linked to one caddy. An admin's
@@ -36,6 +36,7 @@ const els = {
   detail: $('driver-detail'),
   meta: $('driver-meta'),
   go: $('driver-go'),
+  charge: $('driver-charge'),
   off: $('driver-off'),
   retry: $('driver-retry'),
 };
@@ -138,7 +139,7 @@ async function boot(link) {
   // the phone starts sharing as soon as it is online.
   const saved = readSavedShift(link.caddyId);
   if (saved && Date.now() - saved.aliveAt < DRIVER.resumeWithinMs) {
-    shift.go({ since: saved.since });
+    shift.go({ since: saved.since, charging: saved.charging === true });
   } else if (saved) {
     // Android often discards an app that stays in the background: say why GO is back.
     ui.pausedHint = true;
@@ -212,11 +213,12 @@ function caddyStore(fb, caddyId) {
   const { D, db } = fb;
   const node = D.ref(db, `caddies/${caddyId}`);
   return {
-    sendPosition: (f, { moved }) =>
+    sendPosition: (f, { moved, charging }) =>
       D.update(node, {
         ...f,
         ...(moved ? { movedAt: D.serverTimestamp() } : {}),
         online: true,
+        charging,
         lastUpdated: D.serverTimestamp(),
       }),
     setFields: (f) => D.update(node, f),
@@ -278,6 +280,13 @@ els.go.addEventListener('click', () => {
   buzz();
   ui.pausedHint = false;
   shift.go(); // in the tap itself: the wake lock and the location prompt need it
+});
+
+// Charging toggles: one tap on, one tap off (a real move also ends it).
+els.charge.addEventListener('click', () => {
+  if (!shift || ui.unlinked || ui.shift?.mode !== 'on') return;
+  buzz();
+  shift.setCharging(!ui.shift.charging);
 });
 
 els.retry.addEventListener('click', () => location.reload());
@@ -372,9 +381,11 @@ function render() {
   els.go.hidden = on || Boolean(ui.unlinked);
   els.go.disabled = !shift;
   els.off.hidden = !on;
+  els.charge.hidden = !on;
+  els.charge.setAttribute('aria-pressed', String(Boolean(on && s.charging)));
   if (shift || ui.unlinked) els.retry.hidden = true;
   if (had === els.go && els.go.hidden && !els.off.hidden) els.off.focus();
-  else if (had === els.off && els.off.hidden && !els.go.hidden) els.go.focus();
+  else if ((had === els.off || had === els.charge) && !on && !els.go.hidden) els.go.focus();
 }
 
 /** A problem lights a dimmed screen again: an error at once, a warning after 10 s. */
@@ -397,7 +408,7 @@ function lightUpFor(tone) {
 /**
  * What the screen says: a short headline (large, in the tone colour) and one
  * plain sentence below it.
- * @returns {[string, string, 'dim'|'ok'|'warn'|'error']}
+ * @returns {[string, string, 'dim'|'ok'|'charging'|'warn'|'error']}
  */
 function statusLine(s) {
   if (ui.unlinked) return [...ui.unlinked, 'error'];
@@ -456,6 +467,7 @@ function statusLine(s) {
   if (Date.now() - s.sentAt > STALE_MS) {
     return ['Not reaching the server', 'Your location is sent when the signal is back.', 'warn'];
   }
+  if (s.charging) return ['Charging', 'Students see this caddy as charging.', 'charging'];
   return ['Online', 'Students can see this caddy.', 'ok'];
 }
 
