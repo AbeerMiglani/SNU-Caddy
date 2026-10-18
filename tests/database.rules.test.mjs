@@ -240,6 +240,35 @@ test('GPS fields cannot change without a new server timestamp (no flood path)', 
   );
 });
 
+test('charging: a boolean the driver may flip on its own; nobody else writes it', async () => {
+  const d = db('drv2', anon);
+  const node = ref(d, 'caddies/caddy_02');
+  await assertSucceeds(set(node, pos({ charging: true })));
+  // A flag, not a position: no new lastUpdated needed (like going offline).
+  await assertSucceeds(update(node, { charging: false }));
+  await assertSucceeds(update(node, { charging: true }));
+  await assertFails(update(node, { charging: 'yes' }));
+  await assertFails(update(node, { charging: 1 }));
+  let v;
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    v = (await get(ref(ctx.database(), 'caddies/caddy_02'))).val();
+  });
+  assert.equal(v.charging, true);
+  await assertFails(update(ref(db('stu', student), 'caddies/caddy_02'), { charging: false }));
+  await assertFails(update(ref(db('anon1', anon), 'caddies/caddy_02'), { charging: false }));
+  await assertFails(update(ref(d, 'caddies/caddy_01'), { charging: true })); // another caddy
+});
+
+test('charging does not open a flood path: GPS fields still need a new timestamp', async () => {
+  const d = db('drv2', anon);
+  const node = ref(d, 'caddies/caddy_02');
+  await assertSucceeds(set(node, pos({ charging: true })));
+  await assertFails(update(node, { charging: true, lat: 28.5251 }));
+  await assertFails(update(node, { charging: false, lastUpdated: serverTimestamp() })); // < 1 s
+  await sleep(1100);
+  await assertSucceeds(update(node, { charging: false, lastUpdated: serverTimestamp() }));
+});
+
 test('caddy must exist in the fleet', async () => {
   await env.withSecurityRulesDisabled(async (ctx) =>
     set(ref(ctx.database(), 'drivers/drv9'), { caddyId: 'caddy_09', code: 'X', enrolledAt: 1 }),
@@ -353,6 +382,20 @@ test('shift: position updates with and without bearing; heartbeat with the same 
   assert.equal(v.lat, 28.52455);
 });
 
+test('shift: a position write with charging, and charging alone while parked', async () => {
+  const node = ref(db('drv2', anon), 'caddies/caddy_02');
+  await assertSucceeds(update(node, phonePosition({ charging: true })));
+  await assertSucceeds(update(node, { charging: false })); // the toggle: setFields({ charging })
+  await sleep(1100);
+  await assertSucceeds(update(node, phonePosition({ charging: false }))); // next heartbeat
+  let v;
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    v = (await get(ref(ctx.database(), 'caddies/caddy_02'))).val();
+  });
+  assert.equal(v.charging, false);
+  assert.equal(v.online, true);
+});
+
 test('movedAt: server time only, and only together with a position write', async () => {
   const node = ref(db('drv2', anon), 'caddies/caddy_02');
   // A moving caddy: position + movedAt in one write.
@@ -373,7 +416,7 @@ test('movedAt: server time only, and only together with a position write', async
 test('onDisconnect flips online:false when the phone drops', async () => {
   const d = db('drv2', anon);
   const node = ref(d, 'caddies/caddy_02');
-  await assertSucceeds(update(node, phonePosition()));
+  await assertSucceeds(update(node, phonePosition({ charging: true })));
   await assertSucceeds(onDisconnect(node).update({ online: false }));
   goOffline(d);
   await sleep(1500);
@@ -382,5 +425,6 @@ test('onDisconnect flips online:false when the phone drops', async () => {
     v = (await get(ref(ctx.database(), 'caddies/caddy_02'))).val();
   });
   assert.equal(v.online, false);
+  assert.equal(v.charging, true, 'charging stays; students show Offline because online wins');
   assert.equal(v.accuracy, 6, 'everything else stays');
 });

@@ -68,10 +68,12 @@ function fakeDb() {
     refuse: false,
     hold: null, // set to an array to keep position writes pending (a dead socket)
     moved: [],
-    sendPosition(f, { moved }) {
+    charging: [], // the charging flag of each position write
+    sendPosition(f, { moved, charging }) {
       d.log.push(['position', f]);
       d.positions.push(f);
       d.moved.push(moved);
+      d.charging.push(charging);
       if (d.hold) return new Promise((resolve) => d.hold.push(resolve));
       return d.refuse ? Promise.reject(new Error('PERMISSION_DENIED')) : Promise.resolve();
     },
@@ -589,6 +591,121 @@ test('reconnect: onDisconnect is registered at once, before the recovery write',
     db.log.slice(before).map(([k]) => k),
     ['arm', 'position'],
   );
+});
+
+// --- Charging ------------------------------------------------------------------
+test('charging: the toggle is written at once and the state follows', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  assert.equal(last().charging, false);
+  assert.equal(db.charging[0], false, 'the first write says not charging');
+
+  shift.setCharging(true);
+  assert.equal(last().charging, true);
+  assert.deepEqual(db.calls('fields'), [['fields', { charging: true }]]);
+  shift.setCharging(true);
+  assert.equal(db.calls('fields').length, 1, 'no second write for the same value');
+
+  shift.setCharging(false);
+  assert.equal(last().charging, false);
+  assert.deepEqual(db.calls('fields').at(-1), ['fields', { charging: false }]);
+});
+
+test('charging: not before a shift, and not before the caddy node exists', async () => {
+  const shift = makeShift();
+  shift.setCharging(true);
+  assert.equal(last().charging, false);
+  assert.equal(db.calls('fields').length, 0);
+
+  shift.go();
+  shift.setCharging(true); // no fix sent yet: the rules would refuse a lone flag
+  assert.equal(last().charging, true);
+  assert.equal(db.calls('fields').length, 0);
+  geo.fix(HOME);
+  await flush();
+  assert.equal(db.charging[0], true, 'the first position write carries it');
+});
+
+test('charging: heartbeats keep carrying the flag; the 30 s gap and write rules stay', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  for (let s = 0; s <= 65; s++) {
+    geo.fix(HOME);
+    await wait(1000, 500);
+  }
+  assert.equal(db.positions.length, 3, 'first fix + heartbeats at about 30 and 60 s');
+  assert.deepEqual(db.charging, [false, true, true]);
+  assert.deepEqual(db.moved, [false, false, false]);
+});
+
+test('charging while the connection is down: not queued; the next position write carries it', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  db.setConnected(false);
+  const before = db.log.length;
+  shift.setCharging(true);
+  assert.equal(last().charging, true, 'the screen shows it at once');
+  assert.equal(db.log.length, before, 'nothing is written while the connection is down');
+
+  await wait(3000); // the write gap (a recovery write is never within it)
+  db.setConnected(true);
+  await wait(3000);
+  assert.equal(db.positions.length, 2, 'the reconnect write');
+  assert.equal(db.charging.at(-1), true);
+});
+
+test('charging: driving off clears it, and that write carries charging:false', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  assert.equal(last().charging, true);
+
+  await wait(2100);
+  geo.fix(offsetM(HOME, 10, 0), 5, { heading: 0, speed: 4 }); // a real move
+  await flush();
+  assert.equal(db.positions.length, 2);
+  assert.equal(db.moved.at(-1), true);
+  assert.equal(db.charging.at(-1), false);
+  assert.equal(last().charging, false);
+});
+
+test('charging: GPS noise on a parked caddy does not clear it', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  await wait(2100);
+  geo.fix(offsetM(HOME, 6, 0), 5, { speed: 0.1 }); // past the 5 m deadband, but not moving
+  await flush();
+  assert.equal(db.positions.length, 2);
+  assert.equal(db.moved.at(-1), false);
+  assert.equal(db.charging.at(-1), true);
+  assert.equal(last().charging, true);
+});
+
+test('charging: a new shift starts as not charging', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  shift.stop('driver');
+  assert.equal(last().charging, false);
+  shift.go();
+  assert.equal(last().charging, false);
+  geo.fix(HOME);
+  await flush();
+  assert.equal(db.charging.at(-1), false);
 });
 
 test('the campus fence plus its margin lies inside the database rules box', () => {
