@@ -37,6 +37,7 @@ Three separate pages, each with its own entry module and CSS: `index.html` (stud
 - **Modulepreload lists** in `index.html` and `driver.html` must match the real import graph (`tests/modulepreload.test.mjs`).
 - Version numbers (Firebase 12.19.0, Leaflet 1.9.4) appear in the CSP, `firebase.js`, and the README credits; keep them in sync.
 - Test counts in README/ARCHITECTURE ("32 rules tests + 39 unit tests") are hand-maintained.
+- Line endings must be LF (`.gitattributes` enforces it). CRLF changes the inline-script hashes and breaks the CSP in production.
 - Battery/heat is a design goal: no continuous GPS on student phones, no endless animations, pure-black (`#000`) dark surfaces and driver screen.
 
 ## Conventions
