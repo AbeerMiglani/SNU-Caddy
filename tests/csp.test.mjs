@@ -9,7 +9,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+// Browsers hash inline scripts after the HTML parser turns CRLF into LF: do the same.
+const read = (f) => fs.readFileSync(path.join(root, f), 'utf8').replace(/\r\n?/g, '\n');
 const PAGES = ['index.html', 'driver.html', 'admin.html'];
 
 const hosting = JSON.parse(read('firebase.json')).hosting;
