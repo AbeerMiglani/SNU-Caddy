@@ -45,4 +45,4 @@ Three separate pages, each with its own entry module and CSS: `index.html` (stud
 - Any change to `database.rules.json` needs a matching test in `tests/database.rules.test.mjs`.
 - Put text into the page only with `textContent`, never `innerHTML` (XSS rule, see the threat model in `docs/ARCHITECTURE.md`).
 - UI wording: short, plain, sentence case, no exclamation marks (see "Design" in `docs/ARCHITECTURE.md`).
-- The dev machine is Windows: use `python` or `py` if `python3` isn't found.
+- On Windows, use `python` or `py` if `python3` is not found (`npm run serve` calls `python3`).
