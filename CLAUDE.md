@@ -33,6 +33,7 @@ Three separate pages, each with its own entry module and CSS: `index.html` (stud
 ## Things that break easily
 
 - **CSP is hash-pinned.** `firebase.json` has a strict Content-Security-Policy with `sha256-` hashes of the inline scripts in the HTML pages, and the CDN URLs are version-pinned. Changing an inline `<script>`, or the Firebase/Leaflet/jsQR/qrcode-generator versions, requires updating the CSP; `tests/csp.test.mjs` checks the hashes.
+- Only Hosting sends the CSP (`firebase.json` headers, for the three pages only); `python3 -m http.server` sends none. Check UI changes on the hosting emulator (`npm run emulators`, then http://localhost:5000/?demo=1) and look for CSP errors in the console. Set styles from JS with `el.style.x = ...`, never a `style=""` attribute in markup. A new CDN or tile host needs a CSP entry.
 - **Service worker shell list.** `sw.js` has a `SHELL` array and a `CACHE` version (`snu-caddy-vN`). When you add, rename or remove a module or asset, update `SHELL` (`tests/sw.test.mjs` verifies every needed module is saved) and bump `CACHE` in any release that changes a shell file.
 - **Modulepreload lists** in `index.html` and `driver.html` must match the real import graph (`tests/modulepreload.test.mjs`).
 - Version numbers (Firebase 12.19.0, Leaflet 1.9.4) appear in the CSP, `firebase.js`, and the README credits; keep them in sync.
