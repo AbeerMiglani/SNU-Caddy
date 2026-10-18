@@ -54,9 +54,18 @@ The automated tests start their own emulator, so stop `npm run emulators`
 (Ctrl-C) first:
 
 ```bash
-npm test                   # 32 security-rule tests + 39 unit tests
+npm test                   # 32 security-rule tests + 43 unit tests
 npm run test:unit          # only the unit tests (no Java needed)
+npm run test:e2e           # 5 browser tests: the 3 pages in Chromium under the real CSP
 ```
+
+`test:e2e` needs Chromium once: `npx playwright install chromium`. It
+starts the Hosting, Auth and Database emulators itself (ports 5000, 9099,
+9000) and needs internet access (Leaflet and the Firebase SDK come from
+their CDNs).
+
+CI: GitHub Actions runs `npm test` and `npm run test:e2e` on every pull
+request and on every push to `main` (`.github/workflows/test.yml`).
 
 ### Open it on your phone
 
@@ -217,6 +226,8 @@ tests/driver-shift.test.mjs     31 shift-engine tests: fake GPS, database, timer
 tests/sw.test.mjs               the service worker saves every module it needs
 tests/csp.test.mjs              the CSP allows exactly the inline scripts (by hash)
 tests/modulepreload.test.mjs    keeps the preload lists in index.html and driver.html in sync
+tests/versions.test.mjs         every pinned CDN version is the same in every file
+tests/e2e/browser.test.mjs      the 3 pages in Chromium under the real CSP (npm run test:e2e)
 tools/build_campus_data.py      makes the two data files from OpenStreetMap
 docs/                   architecture + Firebase setup guide
 assets/                 icons, Inter font
