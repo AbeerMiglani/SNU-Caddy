@@ -100,13 +100,24 @@ test('pages are served with the production CSP', async () => {
   }
 });
 
-test('demo mode: four caddies on the map and in the list, nothing blocked', async () => {
+test('demo mode: the demo caddies on the map and in the list, nothing blocked', async () => {
   const { ctx, problems } = await open();
   const page = await ctx.newPage();
   await page.goto(BASE + '?emulator=1&demo=1');
-  const markers = await until(async () => (await page.$$('.caddy-marker')).length === 4);
-  assert.ok(markers, `markers: ${(await page.$$('.caddy-marker')).length}`);
-  assert.equal((await page.$$('#caddy-list .row')).length, 4);
+  // Every demo caddy is on the map and in the list (a marker per row).
+  const count = async () => [
+    (await page.$$('.caddy-marker')).length,
+    (await page.$$('#caddy-list .row')).length,
+  ];
+  const shown = await until(async () => {
+    const [markers, rows] = await count();
+    return markers >= 4 && markers === rows;
+  });
+  assert.ok(shown, `markers, rows: ${await count()}`);
+  const states = await page.$$eval('#caddy-list .row', (rows) => rows.map((r) => r.dataset.state));
+  for (const state of ['moving', 'charging', 'offline']) {
+    assert.ok(states.includes(state), `no ${state} caddy in the demo: ${states}`);
+  }
   assert.match(await page.textContent('#summary'), /online/);
   assert.ok(await page.isHidden('#login'), 'the sign-in panel hides in demo mode');
   assert.deepEqual(problems, []);
