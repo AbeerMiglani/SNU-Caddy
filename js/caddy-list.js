@@ -112,11 +112,11 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
       }
       setText(row.name, c.name);
       setText(row.line, c.line ?? '');
-      const when = timeAgo(c.ts, now);
-      const age = { offline: `last seen ${when}`, lost: `last update ${when}` }[c.state];
-      // No-break spaces: when the line wraps, "updated 5 s ago" stays in one piece.
-      const ageText = (age ?? `updated ${when}`).replace(/ /g, '\u00a0');
-      setText(row.meta, `${placeLabel(c)} · ${ageText}`);
+      // The age first: if the line is cut (large text), the place goes, not the age.
+      // A no-break space keeps "5 s" and "14 min" whole when the line wraps.
+      const when = timeAgo(c.ts, now).replace(/(\d) /, '$1\u00a0');
+      const age = { offline: `Last seen ${when}`, lost: `Last update ${when}` }[c.state];
+      setText(row.meta, `${age ?? `Updated ${when}`} · ${placeLabel(c)}`);
       setText(row.state, STATE_TEXT[c.state] ?? c.state);
       row.btn.dataset.state = c.state;
       row.btn.classList.toggle('is-selected', c.id === selectedId);

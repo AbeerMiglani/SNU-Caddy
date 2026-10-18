@@ -239,9 +239,21 @@ button {
   background: var(--map-bg);
 }
 
-/* The map fills the screen: an outside ring would be off screen. */
+/* The map fills the screen and its tiles cover an inside outline, so the ring
+   is drawn above the map panes, and only after Tab (main.js sets .kbd). */
 #map:focus-visible {
-  outline-offset: -3px;
+  outline: none;
+}
+
+/* The ring goes round the part of the map that is in view (between the top
+   bar and the sheet; right of the panel on wide screens). */
+.kbd #map:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: calc(var(--safe-top) + var(--bar-h)) 0 var(--sheet-visible) 0;
+  z-index: 1000;
+  border: 3px solid var(--focus);
+  pointer-events: none;
 }
 
 .leaflet-container {
@@ -1146,6 +1158,10 @@ button {
 
   .map-btn {
     bottom: calc(var(--safe-bottom) + 28px);
+  }
+
+  .kbd #map:focus-visible::after {
+    left: 400px;
   }
 }
 

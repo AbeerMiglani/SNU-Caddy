@@ -219,15 +219,20 @@ function startAdmin(fb, user) {
         const phone = el('td');
         // The start of the uid tells two phones of the same model apart.
         phone.append(el('span', d.device || 'Phone'), el('span', ` · ${uid.slice(0, 6)}`, 'muted'));
-        const when = d.enrolledAt
-          ? new Date(d.enrolledAt).toLocaleString([], {
-              day: 'numeric',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-          : '';
-        tr.append(el('td', caddyName(d.caddyId)), phone, el('td', when), el('td'));
+        // Date and time each stay whole; on a narrow phone the time goes under the date.
+        const when = el('td');
+        if (d.enrolledAt) {
+          const t = new Date(d.enrolledAt);
+          when.append(
+            el('span', `${t.toLocaleDateString([], { day: 'numeric', month: 'short' })},`),
+            ' ',
+            el(
+              'span',
+              t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }),
+            ),
+          );
+        }
+        tr.append(el('td', caddyName(d.caddyId)), phone, when, el('td'));
         tr.lastChild.append(unlink);
         return tr;
       }),
