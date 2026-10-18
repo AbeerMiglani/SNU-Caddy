@@ -37,7 +37,7 @@ Three separate pages, each with its own entry module and CSS: `index.html` (stud
 - **Modulepreload lists** in `index.html` and `driver.html` must match the real import graph (`tests/modulepreload.test.mjs`).
 - Version numbers (Firebase 12.19.0, Leaflet 1.9.4) appear in the CSP, `firebase.js`, and the README credits; keep them in sync.
 - Test counts in README/ARCHITECTURE ("32 rules tests + 39 unit tests") are hand-maintained.
-- Line endings must be LF (`.gitattributes` enforces it). CRLF changes the inline-script hashes and breaks the CSP in production.
+- Line endings must be LF. `.gitattributes` makes new checkouts LF, but a clone made before it keeps its CRLF files (with a clean `git status`) until you run this once, after you commit or stash your work: `git rm -r --cached -q . && git reset --hard`. Then `git ls-files --eol | grep w/crlf` (Git Bash) must print nothing. Browsers hash inline scripts after they turn CRLF into LF, so the LF hashes in `firebase.json` are the correct ones: never paste hashes from a CRLF checkout.
 - Battery/heat is a design goal: no continuous GPS on student phones, no endless animations, pure-black (`#000`) dark surfaces and driver screen.
 
 ## Conventions
