@@ -65,7 +65,7 @@ LANDMARKS = {
     "Block B": "B Block",
     "Block C": "C Block",
     "Block D": "D Block",
-    "Central Library": "Library",
+    "Central Library": "Central Library",
     "Management Block": "Management Block",
     "Research Annexe": "Research Annexe",
     "Hostel 1A": "Hostel 1A",
@@ -82,6 +82,7 @@ LANDMARKS = {
     "Dining Hall 3": "DH3",
     "Health and wellness centre, SNU": "Health Centre",
     "Auctus Supermarket": "Auctus Supermarket",
+    "Mini Mart": "Mini Mart",  # the shop arcade at Hostel 3C, between DH1 and DH2
     "Indoor Sports Complex": "Indoor Sports Complex",
     "Football Ground": "Football Ground",
     "Cricket Ground": "Cricket Ground",
@@ -106,7 +107,7 @@ DEMO_ROUTES = [
         "id": "caddy-01",
         "name": "Caddy 01",
         "line": "Gate shuttle",
-        "stops": ["Main Gate", "Management Block", "Library", "A Block",
+        "stops": ["Main Gate", "Management Block", "Central Library", "A Block",
                   "Research Annexe", "Gate 2"],
     },
     {
@@ -114,13 +115,13 @@ DEMO_ROUTES = [
         "name": "Caddy 02",
         "line": "Hostel loop",
         "stops": ["Hostel 3A", "DH2", "DH3", "Indoor Sports Complex",
-                  "Hostel 2B", "DH1", "Library", "Health Centre"],
+                  "Hostel 2B", "DH1", "Central Library", "Health Centre"],
     },
     {
         "id": "caddy-03",
         "name": "Caddy 03",
         "line": "Academic loop",
-        "stops": ["D Block", "Library", "Hostel 1A",
+        "stops": ["D Block", "Central Library", "Hostel 1A",
                   "Auctus Supermarket", "Management Block", "C Block"],
     },
 ]

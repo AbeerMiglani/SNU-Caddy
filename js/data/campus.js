@@ -40,6 +40,11 @@ export const LANDMARKS = [
     "lng": 77.576026
   },
   {
+    "name": "Central Library",
+    "lat": 28.524988,
+    "lng": 77.574294
+  },
+  {
     "name": "Cricket Ground",
     "lat": 28.52597,
     "lng": 77.57297
@@ -135,11 +140,6 @@ export const LANDMARKS = [
     "lng": 77.570858
   },
   {
-    "name": "Library",
-    "lat": 28.524988,
-    "lng": 77.574294
-  },
-  {
     "name": "Main Gate",
     "lat": 28.533458,
     "lng": 77.576302
@@ -148,6 +148,11 @@ export const LANDMARKS = [
     "name": "Management Block",
     "lat": 28.528137,
     "lng": 77.574315
+  },
+  {
+    "name": "Mini Mart",
+    "lat": 28.524775,
+    "lng": 77.571633
   },
   {
     "name": "Parking 1",

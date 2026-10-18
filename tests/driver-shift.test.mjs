@@ -9,7 +9,7 @@ import { CAMPUS_POLYGON } from '../js/data/campus.js';
 import { createShift } from '../js/driver-shift.js';
 import { offsetM } from '../js/lib/geo.js';
 
-const HOME = { lat: 28.5245, lng: 77.5745 }; // near the Library
+const HOME = { lat: 28.5245, lng: 77.5745 }; // near the Central Library
 const OFF_CAMPUS = { lat: 28.6139, lng: 77.209 }; // New Delhi
 const flush = () => new Promise((r) => setImmediate(r));
 
