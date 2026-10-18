@@ -272,10 +272,17 @@ button:disabled {
 }
 
 /* Charging is on: the same grey button, with the purple as its text and an
-   outline (no new shape, no animation). Tap again to go back to Online. */
+   outline (no new shape, no animation). Two taps to go back to Online. */
 .driver__charge[aria-pressed='true'] {
   box-shadow: inset 0 0 0 2px var(--charge);
   color: var(--charge);
+  font-weight: 700;
+}
+
+/* Second tap needed to start or end charging: the button fills purple. */
+.driver__charge[data-confirm='true'] {
+  background: var(--charge);
+  color: #000;
   font-weight: 700;
 }
 

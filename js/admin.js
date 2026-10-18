@@ -261,8 +261,8 @@ function startAdmin(fb, user) {
       });
       // Students should not see a ghost caddy from an unlinked phone.
       const live = await D.get(D.ref(db, `caddies/${d.caddyId}`));
-      if (live.exists() && live.val().online) {
-        await D.update(D.ref(db, `caddies/${d.caddyId}`), { online: false });
+      if (live.exists() && (live.val().online || live.val().charging)) {
+        await D.update(D.ref(db, `caddies/${d.caddyId}`), { online: false, charging: false });
       }
       $('drivers-status').textContent = `Unlinked. ${name}’s phone can no longer send locations.`;
     } catch {

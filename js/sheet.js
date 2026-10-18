@@ -20,6 +20,7 @@ export function createSheet(sheet, { onChange } = {}) {
   const grab = sheet.querySelector('.sheet__grab');
   const header = sheet.querySelector('.sheet__header');
   const body = sheet.querySelector('.sheet__body');
+  const list = sheet.querySelector('.list');
   const root = document.documentElement;
 
   let snap = 'peek';
@@ -29,7 +30,9 @@ export function createSheet(sheet, { onChange } = {}) {
   let drag = null;
   let justDragged = false;
   let shrinkTimer = 0;
+  let bodyTop = 0; // where the body starts (below the handle and header) at the last measure()
   let peekRowH = 0; // height of the first row or card at the last measure()
+  let stale = false; // the content changed while a finger was down
 
   /** Bottom edge of the top bar (it grows with the phone's safe area). */
   const barBottom = () => document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 64;
@@ -53,13 +56,26 @@ export function createSheet(sheet, { onChange } = {}) {
     // Peek shows the header plus the first caddy row (or the whole location / empty card).
     const firstRow = firstItem();
     peekRowH = firstRow?.offsetHeight ?? 0;
+    bodyTop = body.offsetTop;
     let rowPart = 72;
-    if (firstRow && !firstRow.classList.contains('row')) rowPart = firstRow.offsetHeight + 8;
-    else if (firstRow) rowPart = Math.min(firstRow.offsetHeight, 132) + 12;
-    const peek = Math.min(full, body.offsetTop + rowPart);
+    if (firstRow && !firstRow.classList.contains('row')) rowPart = peekRowH + 8;
+    else if (firstRow) rowPart = Math.min(peekRowH, 132) + 12;
+    const peek = Math.min(full, bodyTop + rowPart);
     const half = Math.min(full, Math.max(peek + 80, Math.round(vh * 0.5)));
     heights = { peek, half, full };
     sheet.style.height = `${full}px`;
+    watchFirst();
+  }
+
+  /** Re-measure after the content changes (for example the empty state appears). */
+  function refresh() {
+    if (wide.matches) return;
+    if (drag) {
+      stale = true; // measured when the finger lifts
+      return;
+    }
+    measure();
+    setSnap(snap, false);
   }
 
   function place(px, animate) {
@@ -145,6 +161,11 @@ export function createSheet(sheet, { onChange } = {}) {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onCancel);
+    // The content changed under the finger: measure before the sheet settles.
+    const changed = stale;
+    stale = false;
+    if (changed) measure();
+    return changed;
   }
 
   function onMove(e) {
@@ -170,8 +191,12 @@ export function createSheet(sheet, { onChange } = {}) {
   function onUp(e) {
     if (!drag || e.pointerId !== drag.id) return;
     const d = drag;
-    endDrag();
-    if (!d.moved) return; // A tap: the row's or handle's own click does the work.
+    const remeasured = endDrag();
+    if (!d.moved) {
+      // A tap: the row's or handle's own click does the work.
+      if (remeasured) setSnap(snap, false);
+      return;
+    }
     // Swallow the click that may follow this drag (see the listener below), but
     // never a later, real tap.
     justDragged = true;
@@ -229,6 +254,40 @@ export function createSheet(sheet, { onChange } = {}) {
   grab.addEventListener('click', cycle);
 
   // --- Layout mode ------------------------------------------------------------
+  // Narrow mode: re-measure when the header or the first item changes size, for
+  // example when the summary or a row's text starts to wrap. The sheet and the body
+  // are never watched: measure() sets their size. The ResizeObserver delivers once
+  // per frame, however many sizes changed.
+  let watching = false;
+  let watched = null;
+  const resizes = new ResizeObserver(() => {
+    // A new target is reported once, too: skip it when measure() has just seen the same.
+    if (body.offsetTop !== bodyTop || (firstItem()?.offsetHeight ?? 0) !== peekRowH) refresh();
+  });
+  // Rows come, go and swap places: look at the new first one.
+  const reorders = new MutationObserver(() => watchFirst());
+
+  function watchFirst() {
+    const item = watching ? firstItem() : null;
+    if (item === watched) return;
+    if (watched) resizes.unobserve(watched);
+    if (item) resizes.observe(item);
+    watched = item;
+  }
+
+  function watch(on) {
+    if (on === watching) return;
+    watching = on;
+    if (on) {
+      resizes.observe(header);
+      reorders.observe(list, { childList: true });
+    } else {
+      resizes.disconnect();
+      reorders.disconnect();
+      watched = null;
+    }
+  }
+
   function layout() {
     if (wide.matches) {
       clearTimeout(shrinkTimer);
@@ -238,9 +297,11 @@ export function createSheet(sheet, { onChange } = {}) {
       sheet.classList.remove('is-full');
       root.classList.remove('sheet-full', 'sheet-animating');
       root.style.setProperty('--sheet-visible', '0px');
+      watch(false);
       onChange?.(cover());
       return;
     }
+    watch(true);
     measure();
     setSnap(snap, false);
   }
@@ -258,17 +319,7 @@ export function createSheet(sheet, { onChange } = {}) {
       return snap;
     },
     setSnap,
-    /** Re-measure after the content changes (for example the empty state appears). */
-    refresh() {
-      if (!wide.matches && !drag) {
-        measure();
-        setSnap(snap, false);
-      }
-    },
+    refresh,
     cover,
-    /** Re-measure only when the first row or card changed height (its text now wraps). */
-    refit() {
-      if ((firstItem()?.offsetHeight ?? 0) !== peekRowH) this.refresh();
-    },
   };
 }

@@ -1,4 +1,6 @@
 // The OLED-black driver screen: GO, then "Online" (or "Charging"), then Go offline.
+// Charging and Go offline both need two taps, so a brush against the phone
+// cannot flip them.
 //
 // Pure black, no map, little lit text. The phone needs no login: it is the
 // anonymous account that the one-time QR setup linked to one caddy. An admin's
@@ -15,6 +17,7 @@ import { createWakeLock } from './lib/wake-lock.js';
 const SHIFT_KEY = 'snucaddy.shift';
 const DIM_AFTER_MS = 20_000;
 const CONFIRM_OFF_MS = 4000;
+const CONFIRM_CHARGE_MS = 4000;
 /** A warning must last this long before it lights a dimmed screen (no flicker). */
 const WARN_WAKE_MS = 10_000;
 const RETRY_MS = 20_000;
@@ -139,16 +142,23 @@ async function boot(link) {
   // the phone starts sharing as soon as it is online.
   const saved = readSavedShift(link.caddyId);
   if (saved && Date.now() - saved.aliveAt < DRIVER.resumeWithinMs) {
-    shift.go({ since: saved.since, charging: saved.charging === true });
+    shift.go({
+      since: saved.since,
+      charging: saved.charging === true,
+      chargeAnchor: saved.chargeAnchor,
+    });
   } else if (saved) {
     // Android often discards an app that stays in the background: say why GO is back.
     ui.pausedHint = true;
     persist.clear();
     render();
     // No ghost caddy: if that shift's connection dropped before onDisconnect
-    // was registered, the caddy would stay "online". (A missing or already
-    // offline caddy makes this a no-op; the rules refuse it quietly.)
-    fb.D.update(fb.D.ref(fb.db, `caddies/${link.caddyId}`), { online: false }).catch(() => {});
+    // was registered, the caddy would stay "online" (and "charging"). (A
+    // missing caddy makes this a no-op; the rules refuse it quietly.)
+    fb.D.update(fb.D.ref(fb.db, `caddies/${link.caddyId}`), {
+      online: false,
+      charging: false,
+    }).catch(() => {});
   }
 
   watchLink(fb, user, link);
@@ -222,7 +232,7 @@ function caddyStore(fb, caddyId) {
         lastUpdated: D.serverTimestamp(),
       }),
     setFields: (f) => D.update(node, f),
-    armDisconnect: () => D.onDisconnect(node).update({ online: false }),
+    armDisconnect: () => D.onDisconnect(node).update({ online: false, charging: false }),
     cancelDisconnect: () => D.onDisconnect(node).cancel(),
     onConnection: (cb) => D.onValue(D.ref(db, '.info/connected'), (s) => cb(s.val() === true)),
   };
@@ -282,12 +292,31 @@ els.go.addEventListener('click', () => {
   shift.go(); // in the tap itself: the wake lock and the location prompt need it
 });
 
-// Charging toggles: one tap on, one tap off (a real move also ends it).
+// Charging needs two taps, on and off (a real move also ends it). The button is
+// right above Go offline: one stray touch must not tell students "Charging".
+let chargeTimer = null;
 els.charge.addEventListener('click', () => {
   if (!shift || ui.unlinked || ui.shift?.mode !== 'on') return;
+  if (els.charge.dataset.confirm !== 'true') {
+    els.charge.dataset.confirm = 'true';
+    els.charge.textContent = ui.shift.charging
+      ? 'Tap again to end charging'
+      : 'Tap again to mark charging';
+    clearTimeout(chargeTimer);
+    chargeTimer = setTimeout(resetCharge, CONFIRM_CHARGE_MS);
+    return;
+  }
+  const on = !ui.shift.charging;
+  resetCharge();
   buzz();
-  shift.setCharging(!ui.shift.charging);
+  shift.setCharging(on);
 });
+
+function resetCharge() {
+  clearTimeout(chargeTimer);
+  els.charge.dataset.confirm = 'false';
+  els.charge.textContent = 'Charging';
+}
 
 els.retry.addEventListener('click', () => location.reload());
 
@@ -342,6 +371,7 @@ setInterval(() => {
 
 // --- Render -----------------------------------------------------------------------
 let lastMode = null;
+let lastCharging = false;
 
 function render() {
   const s = ui.shift;
@@ -351,6 +381,7 @@ function render() {
   if (mode !== lastMode) {
     lastMode = mode;
     resetOff();
+    resetCharge();
     wakeScreen();
   }
 
@@ -382,7 +413,14 @@ function render() {
   els.go.disabled = !shift;
   els.off.hidden = !on;
   els.charge.hidden = !on;
-  els.charge.setAttribute('aria-pressed', String(Boolean(on && s.charging)));
+  const charging = Boolean(on && s.charging);
+  els.charge.setAttribute('aria-pressed', String(charging));
+  if (charging !== lastCharging) {
+    // It changed (the second tap, or the caddy drove off): a confirm in
+    // progress is out of date. Otherwise render() leaves the label alone.
+    lastCharging = charging;
+    resetCharge();
+  }
   if (shift || ui.unlinked) els.retry.hidden = true;
   if (had === els.go && els.go.hidden && !els.off.hidden) els.off.focus();
   else if ((had === els.off || had === els.charge) && !on && !els.go.hidden) els.go.focus();

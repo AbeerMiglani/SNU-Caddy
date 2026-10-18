@@ -11,7 +11,7 @@
 //    Firebase's own /__/ pages always go to the network. Live data must never
 //    come from a cache.
 
-const CACHE = 'snu-caddy-v6'; // bump in every release that changes a SHELL file
+const CACHE = 'snu-caddy-v7'; // bump in every release that changes a SHELL file
 const SLOW_MS = 4000; // weak signal: open the saved page after this long
 
 /**

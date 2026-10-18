@@ -129,6 +129,15 @@ DEMO_ROUTES = [
 # A caddy that is parked and off shift in the demo.
 DEMO_PARKED = {"id": "caddy-04", "name": "Caddy 04", "at": "Parking 1"}
 
+# A caddy that is plugged in and charging in the demo. It sits on the landmark
+# itself, so pick one that is off every demo route (demo_charging checks this).
+DEMO_CHARGING = {"id": "caddy-05", "name": "Caddy 05", "at": "Faculty Residence"}
+
+# The charging caddy must stay this far (metres) from every demo route line
+# (vertices and the stretches between them), so its marker never sits under a
+# moving caddy.
+DEMO_CHARGING_MIN_M = 80
+
 
 # --------------------------------------------------------------------------- #
 # Geometry helpers
@@ -141,6 +150,22 @@ def haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:
     h = (math.sin((lat2 - lat1) / 2) ** 2
          + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2)
     return 2 * 6_371_000 * math.asin(math.sqrt(h))
+
+
+def segment_distance_m(p: tuple[float, float], a: tuple[float, float],
+                       b: tuple[float, float]) -> float:
+    """Distance in metres from point p to the segment a-b (flat map, fine for campus sizes)."""
+    m_per_deg = math.radians(1) * 6_371_000
+    k = math.cos(math.radians(p[0]))
+
+    def xy(q: tuple[float, float]) -> tuple[float, float]:
+        return (q[1] - p[1]) * k * m_per_deg, (q[0] - p[0]) * m_per_deg  # east, north of p
+
+    (ax, ay), (bx, by) = xy(a), xy(b)
+    dx, dy = bx - ax, by - ay
+    len2 = dx * dx + dy * dy
+    t = max(0.0, min(1.0, -(ax * dx + ay * dy) / len2)) if len2 else 0.0
+    return math.hypot(ax + t * dx, ay + t * dy)
 
 
 def point_in_polygon(p: tuple[float, float], poly: list[tuple[float, float]]) -> bool:
@@ -158,6 +183,24 @@ def point_in_polygon(p: tuple[float, float], poly: list[tuple[float, float]]) ->
 def r6(v: float) -> float:
     """Round to 6 decimals (about 0.1 m), which keeps the JS files small."""
     return round(v, 6)
+
+
+def demo_charging(landmarks: dict[str, tuple[float, float]], routes: list[dict]) -> dict:
+    """The charging caddy record: at its landmark, and well away from every route."""
+    name = DEMO_CHARGING["at"]
+    if name not in landmarks:
+        sys.exit(f"Unknown landmark for the demo charging caddy: {name!r}")
+    at = (r6(landmarks[name][0]), r6(landmarks[name][1]))
+    # Routes are loops, so the last point joins the first.
+    nearest = min(segment_distance_m(at, a, b) for route in routes
+                  for a, b in zip(route["path"], route["path"][1:] + route["path"][:1]))
+    if nearest < DEMO_CHARGING_MIN_M:
+        sys.exit(f"The demo charging caddy at {name!r} is only {nearest:.0f} m from a demo route "
+                 f"(at least {DEMO_CHARGING_MIN_M} m needed). Pick a landmark farther away.")
+    charging = {k: v for k, v in DEMO_CHARGING.items() if k != "at"}
+    charging["position"] = list(at)
+    charging["near"] = name
+    return charging
 
 
 # --------------------------------------------------------------------------- #
@@ -336,6 +379,7 @@ def main() -> None:
     parked = {k: v for k, v in DEMO_PARKED.items() if k != "at"}
     parked["position"] = [r6(nodes[parked_node][0]), r6(nodes[parked_node][1])]
     parked["near"] = DEMO_PARKED["at"]
+    charging = demo_charging(landmarks, routes_out)
 
     lats = [p[0] for p in poly]
     lngs = [p[1] for p in poly]
@@ -359,7 +403,9 @@ def main() -> None:
         + "/** Road-following loops for the demo caddies. `stops[].index` points into `path`. */\n"
         + "export const DEMO_ROUTES = " + json.dumps(routes_out, separators=(",", ":")) + ";\n\n"
         + "/** A caddy that is parked and off shift during the demo. */\n"
-        + "export const DEMO_PARKED = " + json.dumps(parked) + ";\n"
+        + "export const DEMO_PARKED = " + json.dumps(parked) + ";\n\n"
+        + "/** A caddy that is plugged in and charging during the demo. */\n"
+        + "export const DEMO_CHARGING = " + json.dumps(charging) + ";\n"
     )
 
     out_dir = ROOT / "js" / "data"

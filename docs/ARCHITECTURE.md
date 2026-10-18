@@ -8,7 +8,7 @@ and how it handles failures.
   Each caddy is **Moving**, **Parked**, **Charging**, **Signal lost** or
   **Offline**, with the time of its last update. (There is no seat status:
   students hop on and off at every block, so drivers do not tap anything
-  while they drive. The one driver tap is **Charging**, for a parked caddy.)
+  while they drive. The one driver action is **Charging** (two taps), for a parked caddy.)
 - **Platform:** a Progressive Web App (PWA): HTML, CSS and JavaScript. No app
   store. It works on iPhone, Android, and Android without Google Play Services
   (GrapheneOS, LineageOS, CalyxOS).
@@ -46,7 +46,7 @@ flowchart LR
 | Service worker | `sw.js` | Opens the app shell in dead zones; never caches live data |
 | Admin dashboard | `admin.html`, `js/admin.js` | SNU accounts on the admin list |
 | Security rules | `database.rules.json` | Enforced by Firebase on every read and write |
-| Tests | `tests/*.test.mjs`, `tests/e2e/` | 35 rules tests in the emulator + 58 unit tests (`npm test`); 5 browser tests under the real CSP (`npm run test:e2e`); both run in CI on every PR |
+| Tests | `tests/*.test.mjs`, `tests/e2e/` | 36 rules tests in the emulator + 75 unit tests (`npm test`); 5 browser tests under the real CSP (`npm run test:e2e`); both run in CI on every PR |
 
 ## 2. Roles and sign-in
 
@@ -104,7 +104,7 @@ under a few kilobytes.
       "bearing": 92,                      // degrees, only while moving
       "accuracy": 6,                      // metres, at most 20 (rules)
       "online": true,                     // false = off shift / disconnected
-      "charging": false,                  // true = parked and plugged in (optional, the driver taps it)
+      "charging": false,                  // true = parked and plugged in (optional, the driver sets it)
       "lastUpdated": 1792147071000,       // server time of the last data (rules)
       "movedAt": 1792147069000            // server time of the last real move (optional)
     }
@@ -133,19 +133,25 @@ place of the last move. So GPS noise cannot make a parked caddy "move".
 
 Precedence: Offline, then Signal lost, then Charging, then Moving / Parked.
 A charging phone that disconnects shows Offline; one that goes quiet shows
-Signal lost. `charging` is a flag the driver sets with one tap; the rules
+Signal lost. `charging` is a flag the driver sets with two taps (the first
+shows a confirm label, like Go offline); the rules
 accept it as a boolean, on its own (it is not a position, so it needs no new
 `lastUpdated`). Every position write carries it, so a flag that was lost in a
 dead zone is corrected by the next heartbeat (at most 30 s). The toggle is
 written at once only while the connection is up and after the first position
 write has started; otherwise the next position write carries it. Driving off
-clears it: a real move that also takes the caddy 30 m or more from where the
-driver set it (`DRIVER.chargeClearM`; GPS drift of a parked phone, which can
-pass the 10 m Moving test now and then, does not). GO starts a shift as not
-charging (its first write says `charging: false`). Go offline sets only
-`online: false`; the `charging: true` left in the database is harmless,
-because Offline wins. A reload during a shift keeps the flag (saved with the
-shift).
+clears it: a real move that also takes the caddy 30 m or more from the
+charger (`DRIVER.chargeClearM`), and farther than the error radii of the two
+fixes added together, so GPS drift of a parked phone, which can pass the 10 m
+Moving test now and then, does not. The charger is the first fix less than
+`DRIVER.fixFreshMs` old after the tap (after a GPS dead zone, the next fresh
+one). GO starts a shift as not charging (its first write says
+`charging: false`). Go offline, the `onDisconnect` hook, the stale-shift
+cleanup on the driver phone and an admin's Unlink all write `online: false,
+charging: false`, so the node never keeps a stale `charging: true`. Only the
+off-campus mark writes `online: false` alone (the shift is still charging, and
+the next on-campus write carries the flag). A reload during a shift keeps the
+flag and the charger's place (both saved with the shift).
 
 ## 4. Real-time data flow
 
@@ -196,11 +202,11 @@ shift).
 | Old connection's `onDisconnect` runs late | Every position write carries `online: true`, so the next write (at most 30 s later) corrects it. |
 | Outside campus | No positions; `online: false` once. Back inside: the next fix makes it online again. |
 | App in the background | The browser stops GPS and timers. Students see "Signal lost" after 90 s. Back within 10 min: the shift continues. After 10 min: the shift ends, so a forgotten phone leaves no ghost caddy. |
-| Reload or crash during a shift | The shift resumes by itself if it was alive in the last 10 min. Otherwise the screen says why GO is back, and the phone sets its caddy `online: false` (no ghost caddy, even if the old connection dropped before `onDisconnect` was registered). |
+| Reload or crash during a shift | The shift resumes by itself if it was alive in the last 10 min. Otherwise the screen says why GO is back, and the phone sets its caddy `online: false, charging: false` (no ghost caddy, even if the old connection dropped before `onDisconnect` was registered). |
 | Go offline while the first write still waits (dead socket) | `online: false` is still sent; the SDK delivers it after the waiting write, so the caddy ends offline. |
-| Charging tapped | `charging` is written at once (only while the connection is up). The driver app must stay open: if the phone is locked, students see "Signal lost" after 90 s, and "Offline" only when the phone drops its connection (not on a timer) or when the driver reopens the app after 10 min. |
-| Go offline (two taps) | `online: false`, then `onDisconnect` cancelled; GPS and wake lock off. |
-| Admin unlinks the phone | The `drivers/{uid}` listener fires: the shift stops at once, the phone returns to the student app. The admin page sets `online: false`. |
+| Charging confirmed (second tap) | `charging` is written at once (only while the connection is up). The driver app must stay open: if the phone is locked, students see "Signal lost" after 90 s, and "Offline" only when the phone drops its connection (not on a timer) or when the driver reopens the app after 10 min. |
+| Go offline (two taps) | `online: false, charging: false`, then `onDisconnect` cancelled; GPS and wake lock off. |
+| Admin unlinks the phone | The `drivers/{uid}` listener fires: the shift stops at once, the phone returns to the student app. The admin page sets `online: false, charging: false`. |
 | Writes refused (for example the caddy was removed from the fleet) | Back-off (2, 4, 8 … 30 s); after 3 in a row the screen says "Ask an admin". |
 
 The driver screen is OLED-black: a pure `#000` background and little lit
@@ -365,6 +371,7 @@ looks like the work of one team. The rules (`css/app.css` holds the tokens):
 
 The driver screen keeps the same type and shapes on a pure black background
 (OLED). It has one circle (the blue GO), a grey Charging button (outlined in
-purple while it is on) and one big status headline. That
+purple while it is on, filled purple while it waits for the second tap) and
+one big status headline. That
 headline (40 px) is the one size outside the scale: the driver reads it at a
 glance from the seat.

@@ -256,7 +256,20 @@ test('charging: a boolean the driver may flip on its own; nobody else writes it'
   assert.equal(v.charging, true);
   await assertFails(update(ref(db('stu', student), 'caddies/caddy_02'), { charging: false }));
   await assertFails(update(ref(db('anon1', anon), 'caddies/caddy_02'), { charging: false }));
+  // Another caddy: give caddy_01 a valid node first, so that only the binding
+  // (drv2 is bound to caddy_02) can refuse the write, not the node's shape.
+  await env.withSecurityRulesDisabled(async (ctx) =>
+    set(ref(ctx.database(), 'caddies/caddy_01'), {
+      lat: 28.525,
+      lng: 77.575,
+      accuracy: 5,
+      online: true,
+      lastUpdated: Date.now() - 5000,
+    }),
+  );
   await assertFails(update(ref(d, 'caddies/caddy_01'), { charging: true })); // another caddy
+  // The same update is fine for someone who may write that node.
+  await assertSucceeds(update(ref(db('adm', adminTok), 'caddies/caddy_01'), { charging: true }));
 });
 
 test('charging does not open a flood path: GPS fields still need a new timestamp', async () => {
@@ -340,6 +353,49 @@ test('admin can force a caddy offline; a driver cannot delete its binding', asyn
   await assertFails(remove(ref(db('drv2', anon), 'drivers/drv2')));
 });
 
+test('going offline also clears charging: the bound phone and an admin may write both', async () => {
+  const read = async () => {
+    let v;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      v = (await get(ref(ctx.database(), 'caddies/caddy_02'))).val();
+    });
+    return v;
+  };
+  const charging = () =>
+    env.withSecurityRulesDisabled(async (ctx) =>
+      update(ref(ctx.database(), 'caddies/caddy_02'), { online: true, charging: true }),
+    );
+
+  // The phone (Go offline, the stale-shift cleanup).
+  await assertSucceeds(update(ref(db('drv2', anon), 'caddies/caddy_02'), { charging: true }));
+  await assertSucceeds(
+    update(ref(db('drv2', anon), 'caddies/caddy_02'), { online: false, charging: false }),
+  );
+  let v = await read();
+  assert.equal(v.online, false);
+  assert.equal(v.charging, false);
+  assert.equal(v.accuracy, 5, 'the position stays');
+
+  // An admin (Unlink on the dashboard).
+  await charging();
+  await assertSucceeds(
+    update(ref(db('adm', adminTok), 'caddies/caddy_02'), { online: false, charging: false }),
+  );
+  v = await read();
+  assert.equal(v.online, false);
+  assert.equal(v.charging, false);
+
+  // Nobody else.
+  await charging();
+  await assertFails(
+    update(ref(db('stu', student), 'caddies/caddy_02'), { online: false, charging: false }),
+  );
+  await assertFails(
+    update(ref(db('anon1', anon), 'caddies/caddy_02'), { online: false, charging: false }),
+  );
+  assert.equal((await read()).charging, true);
+});
+
 test('students cannot make themselves admin', async () => {
   await assertFails(set(ref(db('stu', student), 'admins/stu'), true));
 });
@@ -360,10 +416,11 @@ test('shift: first position creates the node (no bearing yet), then onDisconnect
   await assertSucceeds(enroll(d, 'anon1', CODE));
   const node = ref(d, 'caddies/caddy_01');
   // Before the node exists, onDisconnect's online:false alone would be an incomplete caddy.
-  await assertFails(onDisconnect(node).update({ online: false }));
+  await assertFails(onDisconnect(node).update({ online: false, charging: false }));
   await assertSucceeds(update(node, phonePosition()));
-  await assertSucceeds(onDisconnect(node).update({ online: false })); // no wait needed
-  await assertSucceeds(update(node, { online: false })); // outside campus / Go offline
+  await assertSucceeds(onDisconnect(node).update({ online: false, charging: false })); // no wait needed
+  await assertSucceeds(update(node, { online: false })); // outside campus
+  await assertSucceeds(update(node, { online: false, charging: false })); // Go offline
   await assertSucceeds(onDisconnect(node).cancel());
 });
 
@@ -413,11 +470,11 @@ test('movedAt: server time only, and only together with a position write', async
   assert.ok(v.movedAt < v.lastUpdated, 'the heartbeat did not touch movedAt');
 });
 
-test('onDisconnect flips online:false when the phone drops', async () => {
+test('onDisconnect flips online and charging to false when the phone drops', async () => {
   const d = db('drv2', anon);
   const node = ref(d, 'caddies/caddy_02');
   await assertSucceeds(update(node, phonePosition({ charging: true })));
-  await assertSucceeds(onDisconnect(node).update({ online: false }));
+  await assertSucceeds(onDisconnect(node).update({ online: false, charging: false }));
   goOffline(d);
   await sleep(1500);
   let v;
@@ -425,6 +482,6 @@ test('onDisconnect flips online:false when the phone drops', async () => {
     v = (await get(ref(ctx.database(), 'caddies/caddy_02'))).val();
   });
   assert.equal(v.online, false);
-  assert.equal(v.charging, true, 'charging stays; students show Offline because online wins');
+  assert.equal(v.charging, false, 'a dropped phone is not charging any more');
   assert.equal(v.accuracy, 6, 'everything else stays');
 });

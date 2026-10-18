@@ -4,7 +4,9 @@
 > Some details changed during review (for example, Charging now ends only
 > when the caddy drives about 30 m away, and the cache version). Where this
 > file and `docs/ARCHITECTURE.md` differ, ARCHITECTURE describes the shipped
-> behaviour.
+> behaviour. Later review fixes changed more: Charging needs two taps, Go
+> offline and `onDisconnect` also clear `charging`, and the demo's charging
+> caddy is generated (`DEMO_CHARGING`) at Faculty Residence.
 
 ## Context
 
