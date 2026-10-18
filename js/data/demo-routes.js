@@ -6,3 +6,6 @@ export const DEMO_ROUTES = [{"id":"caddy-01","name":"Caddy 01","line":"Gate shut
 
 /** A caddy that is parked and off shift during the demo. */
 export const DEMO_PARKED = {"id": "caddy-04", "name": "Caddy 04", "position": [28.524156, 77.574571], "near": "Parking 1"};
+
+/** A caddy that is plugged in and charging during the demo. */
+export const DEMO_CHARGING = {"id": "caddy-05", "name": "Caddy 05", "position": [28.529501, 77.578283], "near": "Faculty Residence"};

@@ -9,8 +9,7 @@
 // "Parked", (Caddy 05) "Charging" and (Caddy 04) "Offline".
 
 import { DEMO, GPS_RULES } from './config.js';
-import { LANDMARKS } from './data/campus.js';
-import { DEMO_PARKED, DEMO_ROUTES } from './data/demo-routes.js';
+import { DEMO_CHARGING, DEMO_PARKED, DEMO_ROUTES } from './data/demo-routes.js';
 import { bearingDeg, distanceM, lerpLatLng, offsetM } from './lib/geo.js';
 import { createPingGate } from './lib/ping-gate.js';
 
@@ -233,8 +232,8 @@ export class DemoSimulator {
     this.emitCharging(now);
     for (const c of this.caddies) this.emitFix(c, now);
     // Started in a background tab (e.g. a ?demo=1 link)? The visibility
-    // handler starts the clock when the page is shown.
-    if (!document.hidden) this.resume();
+    // handler calls resume() when the page is shown, and that starts the clock.
+    if (!document.hidden) this.startClock();
   }
 
   stop() {
@@ -243,7 +242,7 @@ export class DemoSimulator {
     this.running = false;
     for (const c of this.caddies) this.onRemove(c.id);
     this.onRemove(DEMO_PARKED.id);
-    this.onRemove(DEMO.charging.id);
+    this.onRemove(DEMO_CHARGING.id);
     this.caddies = [];
   }
 
@@ -253,9 +252,13 @@ export class DemoSimulator {
     this.timer = 0;
   }
 
+  startClock() {
+    this.timer = setInterval(() => this.tick(), DEMO.gpsTickMs);
+  }
+
   resume() {
     if (!this.running || this.timer) return;
-    this.timer = setInterval(() => this.tick(), DEMO.gpsTickMs);
+    this.startClock();
     // After a pause, send a fresh fix at once (like a phone that comes back),
     // so the caddies never flash "Signal lost" while the next tick is due.
     const now = Date.now();
@@ -286,18 +289,16 @@ export class DemoSimulator {
    * like a parked driver phone with the Charging button on.
    */
   emitCharging(now) {
-    const { id, name, landmark, movedMinutesAgo } = DEMO.charging;
-    const at = LANDMARKS.find((l) => l.name === landmark);
-    if (!at) return;
+    const { id, name, position } = DEMO_CHARGING;
     this.chargingAt = now;
     this.onUpdate({
       id,
       name,
       online: true,
       charging: true,
-      movedAt: now - movedMinutesAgo * 60_000,
-      lat: at.lat,
-      lng: at.lng,
+      movedAt: now - DEMO.chargingMovedMinutesAgo * 60_000,
+      lat: position[0],
+      lng: position[1],
       heading: 0,
       speed: 0,
       ts: now,

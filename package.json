@@ -7,8 +7,8 @@
   "scripts": {
     "serve": "python3 -m http.server 8000",
     "emulators": "firebase emulators:start --project demo-snu-caddy",
-    "test": "firebase emulators:exec --only database --project demo-snu-caddy \"node --test --test-concurrency=1 tests/database.rules.test.mjs tests/driver-shift.test.mjs tests/caddy-state.test.mjs tests/modulepreload.test.mjs tests/sw.test.mjs tests/csp.test.mjs tests/versions.test.mjs\"",
-    "test:unit": "node --test tests/driver-shift.test.mjs tests/caddy-state.test.mjs tests/modulepreload.test.mjs tests/sw.test.mjs tests/csp.test.mjs tests/versions.test.mjs",
+    "test": "firebase emulators:exec --only database --project demo-snu-caddy \"node --test --test-concurrency=1 tests/database.rules.test.mjs tests/driver-shift.test.mjs tests/caddy-state.test.mjs tests/modulepreload.test.mjs tests/sw.test.mjs tests/csp.test.mjs tests/versions.test.mjs tests/demo.test.mjs\"",
+    "test:unit": "node --test tests/driver-shift.test.mjs tests/caddy-state.test.mjs tests/modulepreload.test.mjs tests/sw.test.mjs tests/csp.test.mjs tests/versions.test.mjs tests/demo.test.mjs",
     "test:e2e": "firebase emulators:exec --only hosting,auth,database --project demo-snu-caddy \"node --test --test-concurrency=1 tests/e2e/browser.test.mjs\"",
     "deploy": "firebase deploy --only hosting,database"
   },
