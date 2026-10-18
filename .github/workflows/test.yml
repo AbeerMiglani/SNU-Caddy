@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Security rules (Database emulator) and unit tests.
   test:
     runs-on: ubuntu-latest
     # Stops a stuck emulator from using up Actions minutes.
@@ -35,7 +36,7 @@ jobs:
 
       # The emulator download depends on the firebase-tools version in the
       # lockfile, so it is only downloaded again when that changes.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -44,3 +45,34 @@ jobs:
       - run: npm ci
 
       - run: npm test
+
+  # The three pages in Chromium, served by the Hosting emulator with the real
+  # firebase.json headers (CSP), against the Auth and Database emulators.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: firebase-emulators-${{ runner.os }}-
+
+      - run: npm ci
+
+      # Chromium for the Playwright version in the lockfile, with its system libraries.
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run test:e2e
