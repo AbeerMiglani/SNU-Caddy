@@ -57,7 +57,8 @@ let renderTimer = 0;
 function scheduleRender() {
   if (!renderTimer) renderTimer = setTimeout(renderNow, RENDER_DELAY_MS);
 }
-function renderNow() {
+/** @param {boolean} [remeasure] measure the sheet even if the list kept its shape */
+function renderNow(remeasure = false) {
   clearTimeout(renderTimer);
   renderTimer = 0;
   // "A caddy shows here when…" only when live data is really loaded (or there
@@ -68,8 +69,9 @@ function renderNow() {
   const sheetEl = $('#sheet');
   const changed = sheetEl.classList.contains('is-loading') !== loading;
   sheetEl.classList.toggle('is-loading', loading);
-  if (list.render(caddies, selectedId, summaryNote()) || changed) sheet.refresh();
-  else sheet.refit(); // a row's place / age now wraps to two lines, or no longer does
+  // The sheet sees by itself when the header or the first row changes size (sheet.js);
+  // it needs a call only when what it shows changes kind: list, empty text or card.
+  if (list.render(caddies, selectedId, summaryNote()) || changed || remeasure) sheet.refresh();
 }
 
 /** A sheet summary that replaces the caddy count, or null. */
@@ -188,8 +190,7 @@ const gate = FIREBASE_ON
         },
         onChange: () => {
           $('#sheet').classList.toggle('is-gated', !$('#gate').hidden);
-          renderNow(); // sets the summary ('' under a card) before the sheet is measured
-          sheet.refresh();
+          renderNow(true); // sets the summary ('' under a card) before the sheet is measured
         },
       },
     )
