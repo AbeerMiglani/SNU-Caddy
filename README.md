@@ -140,15 +140,15 @@ SNU roads, a fourth caddy is parked and offline, and a fifth is charging:
 
 | Caddy | Route | Shows |
 | ----- | ----- | ----- |
-| Caddy 01 | Gate shuttle: Main Gate, Management Block, Library, A Block, Research Annexe, Gate 2 (4.0 km) | Moving |
-| Caddy 02 | Hostel loop: Hostel 3A, DH2, DH3, Indoor Sports Complex, Hostel 2B, DH1, Library, Health Centre (2.2 km) | Moving |
-| Caddy 03 | Academic loop: D Block, Library, Hostel 1A, Auctus Supermarket, Management Block, C Block (1.7 km) | Parked at D Block (a 100 s break), then Moving |
+| Caddy 01 | Gate shuttle: Main Gate, Management Block, Central Library, A Block, Research Annexe, Gate 2 (4.0 km) | Moving |
+| Caddy 02 | Hostel loop: Hostel 3A, DH2, DH3, Indoor Sports Complex, Hostel 2B, DH1, Central Library, Health Centre (2.2 km) | Moving |
+| Caddy 03 | Academic loop: D Block, Central Library, Hostel 1A, Auctus Supermarket, Management Block, C Block (1.7 km) | Parked at D Block (a 100 s break), then Moving |
 | Caddy 04 | Parked at Parking 1 | Offline |
 | Caddy 05 | Plugged in at DH1 | Charging |
 
 ## What students see
 
-Each caddy shows its name, where it is ("Near Library"), how long ago it
+Each caddy shows its name, where it is ("Near Central Library"), how long ago it
 updated, and one of five states:
 
 | State | Means |
