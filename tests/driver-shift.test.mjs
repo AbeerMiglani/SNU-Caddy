@@ -553,6 +553,40 @@ test('resume after a reload keeps the shift start; the GPS search starts now', a
   assert.equal(db.positions.length, 1);
 });
 
+test('charging survives a reload: it is saved with the shift and the first write carries it', async () => {
+  const first = makeShift();
+  first.go();
+  geo.fix(HOME);
+  await flush();
+  assert.equal(persist.saved.charging, false);
+  first.setCharging(true);
+  assert.equal(persist.saved.charging, true, 'saved at once, not only at the next heartbeat');
+
+  // The page reloads: a new engine continues with what the screen read back.
+  const saved = persist.saved;
+  first.dispose();
+  db.positions.length = 0;
+  db.charging.length = 0;
+  const second = makeShift();
+  second.go({ since: saved.since, charging: saved.charging });
+  assert.equal(last().charging, true);
+  geo.fix(HOME);
+  await flush();
+  assert.deepEqual(db.charging, [true], 'students keep seeing Charging, not Parked');
+
+  // Driving off still clears it, and the save follows.
+  await wait(2100);
+  geo.fix(offsetM(HOME, 10, 0), 5, { heading: 0, speed: 4 });
+  await flush();
+  assert.equal(persist.saved.charging, false);
+});
+
+test('a shift saved without the flag (older app version) resumes as not charging', async () => {
+  const shift = makeShift();
+  shift.go({ since: Date.now() - 60_000, charging: undefined });
+  assert.equal(last().charging, false);
+});
+
 test('outside campus, then no GPS for a while: still "outside" (not "lost")', async () => {
   const shift = makeShift();
   shift.go();

@@ -5,9 +5,10 @@ how SNU Caddy works, how it protects data, how it stays on the free tier,
 and how it handles failures.
 
 - **Product:** a live map of campus caddies (golf-cart shuttles) for students.
-  Each caddy is **Moving**, **Parked**, **Signal lost** or **Offline**, with the
-  time of its last update. (There is no seat status: students hop on and off
-  at every block, so drivers do not tap anything while they drive.)
+  Each caddy is **Moving**, **Parked**, **Charging**, **Signal lost** or
+  **Offline**, with the time of its last update. (There is no seat status:
+  students hop on and off at every block, so drivers do not tap anything
+  while they drive. The one driver tap is **Charging**, for a parked caddy.)
 - **Platform:** a Progressive Web App (PWA): HTML, CSS and JavaScript. No app
   store. It works on iPhone, Android, and Android without Google Play Services
   (GrapheneOS, LineageOS, CalyxOS).
@@ -45,7 +46,7 @@ flowchart LR
 | Service worker | `sw.js` | Opens the app shell in dead zones; never caches live data |
 | Admin dashboard | `admin.html`, `js/admin.js` | SNU accounts on the admin list |
 | Security rules | `database.rules.json` | Enforced by Firebase on every read and write |
-| Tests | `tests/*.test.mjs` | 32 rules tests in the emulator + 39 unit tests (`npm test`) |
+| Tests | `tests/*.test.mjs` | 35 rules tests in the emulator + 52 unit tests (`npm test`) |
 
 ## 2. Roles and sign-in
 
@@ -103,6 +104,7 @@ under a few kilobytes.
       "bearing": 92,                      // degrees, only while moving
       "accuracy": 6,                      // metres, at most 20 (rules)
       "online": true,                     // false = off shift / disconnected
+      "charging": false,                  // true = parked and plugged in (optional, the driver taps it)
       "lastUpdated": 1792147071000,       // server time of the last data (rules)
       "movedAt": 1792147069000            // server time of the last real move (optional)
     }
@@ -115,18 +117,29 @@ under a few kilobytes.
 Size: about 200 bytes per caddy. Old setup codes are deleted by the admin
 dashboard (expired ones at once, used ones after 24 hours).
 
-**States on the student map** (`js/caddy-state.js`), from three fields:
+**States on the student map** (`js/caddy-state.js`), from four fields:
 
 | State | Rule | On the map |
 | ----- | ---- | ---------- |
 | Moving | `online` and data less than 90 s old and `movedAt` less than 60 s old | Normal icon, green dot |
 | Parked | `online` and data less than 90 s old, no real move for 60 s | Normal icon, blue dot |
+| Charging | `online`, data less than 90 s old, and `charging` is `true` | Normal icon at its parked place, purple dot |
 | Signal lost | `online`, but no data for 90 s or more | Dimmed icon, amber dot |
 | Offline | `online` is `false` (Go offline, or `onDisconnect`) | Grey icon, "last seen …" |
 
 A "real move" is decided on the driver phone: GPS speed of at least 1 m/s,
 or (without speed) at least 10 m and more than the error radius from the
 place of the last move. So GPS noise cannot make a parked caddy "move".
+
+Precedence: Offline, then Signal lost, then Charging, then Moving / Parked.
+A charging phone that disconnects shows Offline; one that goes quiet shows
+Signal lost. `charging` is a flag the driver sets with one tap; the rules
+accept it as a boolean, on its own (it is not a position, so it needs no new
+`lastUpdated`). Every position write carries it, so a flag that was lost in a
+dead zone is corrected by the next heartbeat (at most 30 s). The toggle is
+written at once only while the connection is up (like every write, it is
+never queued while the connection is down). A real move clears it, and so do
+GO and Go offline. A reload during a shift keeps it (saved with the shift).
 
 ## 4. Real-time data flow
 
@@ -144,7 +157,8 @@ place of the last move. So GPS noise cannot make a parked caddy "move".
    one every **2 s** (the newest fix wins), never while the connection is
    down. Each write is one `update()` of the caddy object with
    `online: true` and `lastUpdated: ServerValue.TIMESTAMP`, plus
-   `movedAt: ServerValue.TIMESTAMP` when the caddy really moved.
+   `movedAt: ServerValue.TIMESTAMP` when the caddy really moved, and the
+   `charging` flag.
 2. **Database**: the write overwrites `caddies/{id}`. The rules check the
    sender, the fields, the campus box, and the server timestamps. A GPS field
    (lat, lng, bearing, accuracy) and `movedAt` can change only together with
@@ -178,13 +192,14 @@ place of the last move. So GPS noise cannot make a parked caddy "move".
 | App in the background | The browser stops GPS and timers. Students see "Signal lost" after 90 s. Back within 10 min: the shift continues. After 10 min: the shift ends, so a forgotten phone leaves no ghost caddy. |
 | Reload or crash during a shift | The shift resumes by itself if it was alive in the last 10 min. Otherwise the screen says why GO is back, and the phone sets its caddy `online: false` (no ghost caddy, even if the old connection dropped before `onDisconnect` was registered). |
 | Go offline while the first write still waits (dead socket) | `online: false` is still sent; the SDK delivers it after the waiting write, so the caddy ends offline. |
+| Charging tapped | `charging` is written at once (only while the connection is up). The driver app must stay open: if the phone is locked, students see "Signal lost" after 90 s and "Offline" after 10 min. |
 | Go offline (two taps) | `online: false`, then `onDisconnect` cancelled; GPS and wake lock off. |
 | Admin unlinks the phone | The `drivers/{uid}` listener fires: the shift stops at once, the phone returns to the student app. The admin page sets `online: false`. |
 | Writes refused (for example the caddy was removed from the fleet) | Back-off (2, 4, 8 … 30 s); after 3 in a row the screen says "Ask an admin". |
 
 The driver screen is OLED-black: a pure `#000` background and little lit
-text. One large headline gives the status in colour (green "Online", amber
-for a warning, red for an error) with one plain sentence below it. It dims
+text. One large headline gives the status in colour (green "Online", purple
+"Charging", amber for a warning, red for an error) with one plain sentence below it. It dims
 after 20 s without a touch (an error lights it again at once, a warning
 after 10 s) and moves its content by a few pixels every minute, so hours of
 a still picture cannot burn in.
@@ -202,15 +217,15 @@ a still picture cannot burn in.
 
 Validation on `caddies/{id}`: lat/lng inside the campus box (also protects
 the driver's privacy off campus), `accuracy` ≤ 20 m, `bearing` 0–360,
-`online` boolean, `lastUpdated` = server time, `movedAt` = server time (and
+`online` and `charging` booleans, `lastUpdated` = server time, `movedAt` = server time (and
 only together with a new `lastUpdated`), no extra fields (a `status` field
 is refused), and the caddy must exist in `fleet`. GPS fields change only
 with a new `lastUpdated`, at most once per second.
 
-The rules are tested with the Firebase Emulator: 32 tests, one per attack
+The rules are tested with the Firebase Emulator: 35 tests, one per attack
 or allowed action, including the exact writes a driver phone makes in a
-shift (`npm test`). The shift engine has 31 more tests with a fake GPS, a
-fake database and fake timers; other tests keep the service worker list,
+shift (`npm test`). The shift engine has 40 more tests with a fake GPS, a
+fake database and fake timers; the map states have 4 tests, and other tests keep the service worker list,
 the CSP hashes and the preload lists in sync (`npm run test:unit`, no
 emulator needed).
 
@@ -321,7 +336,7 @@ but it needs a billing account. That is a decision for SNU IT.
 | 1 | Uber-style map, bottom sheet, theme (Auto/Light/Dark), demo/pitch mode | Done |
 | 2 | Firebase project, `@snu.edu.in` login, geofence, QR device binding, admin dashboard, security rules + tests | Done |
 | 3 | Driver screen: GO → Online → Go offline, GPS gate, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
-| 4 | Live caddies on the student map (Moving / Parked / Signal lost / Offline), connection management with idle pause, service worker (offline app shell), strict CSP | Done |
+| 4 | Live caddies on the student map (Moving / Parked / Charging / Signal lost / Offline), connection management with idle pause, service worker (offline app shell), strict CSP | Done |
 
 ## 10. Design
 
@@ -330,7 +345,7 @@ looks like the work of one team. The rules (`css/app.css` holds the tokens):
 
 | Part | Rule |
 | ---- | ---- |
-| Colour | Black and white first, one grey scale. Colour only where it means something: the state dots (Moving green, Parked blue, Signal lost amber, Offline grey), errors (red) and the driver GO (blue). |
+| Colour | Black and white first, one grey scale. Colour only where it means something: the state dots (Moving green, Parked blue, Charging purple, Signal lost amber, Offline grey), errors (red) and the driver GO (blue). |
 | Type | Inter, set tight. Sizes 32 / 24 / 18 / 16 / 14 / 12 px; weights 400, 500 and 700 only. Sentence case everywhere; no uppercase labels. |
 | Shape | 8 px corners on buttons, inputs and map buttons; 12 px only on the top of the bottom sheet. No pills and no cards: sections are separated by space and hairlines. |
 | Depth | One crisp shadow, only for things that float over the map. |
@@ -340,6 +355,7 @@ looks like the work of one team. The rules (`css/app.css` holds the tokens):
 | App icon | A black square with the same top-down caddy as the map markers (`assets/icon.svg`); the phone rounds the corners itself. |
 
 The driver screen keeps the same type and shapes on a pure black background
-(OLED). It has one circle (the blue GO) and one big status headline. That
+(OLED). It has one circle (the blue GO), a grey Charging button (outlined in
+purple while it is on) and one big status headline. That
 headline (40 px) is the one size outside the scale: the driver reads it at a
 glance from the seat.

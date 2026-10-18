@@ -96,7 +96,8 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let hiddenAt = null;
 
   const emit = () => onChange?.({ ...state });
-  const save = () => persist.save({ since: state.since, aliveAt: now() });
+  const save = () =>
+    persist.save({ since: state.since, charging: state.charging, aliveAt: now() });
 
   // --- Connection (also while idle, so the screen can show it) --------------
   const offConnection = store.onConnection((up) => {
@@ -179,6 +180,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     if (moved && state.charging) {
       // Driving off ends the charging stop; this write carries charging:false.
       state.charging = false;
+      save();
       emit();
     }
 
@@ -364,13 +366,15 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
     if (state.mode !== 'on' || state.charging === on) return;
     state.charging = on;
     if (state.connected && issued) store.setFields({ charging: on }).catch(() => {});
+    save(); // a reload mid-charge resumes as charging
     emit();
   }
 
   // --- Shift ------------------------------------------------------------------
   /**
-   * Start a shift. `resume` continues a shift after a reload, with its start time.
-   * @param {{ since?: number }} [resume]
+   * Start a shift. `resume` continues a shift after a reload, with its start
+   * time and whether it was charging (the first position write carries that).
+   * @param {{ since?: number, charging?: boolean }} [resume]
    */
   function go(resume) {
     if (state.mode === 'on') return;
@@ -383,7 +387,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
       accuracy: null,
       sentAt: null,
       refused: false,
-      charging: false,
+      charging: resume?.charging === true,
       since: resume?.since ?? t,
       gpsSince: t,
       ended: null,

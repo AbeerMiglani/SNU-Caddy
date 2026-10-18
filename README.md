@@ -7,8 +7,8 @@ It is a mobile web app (PWA): plain HTML, CSS and JavaScript, with no build step
 | ----- | ---- | ------ |
 | 1 | Full-screen campus map, bottom sheet, theme button (Auto / Light / Dark), demo / pitch mode | Done |
 | 2 | Firebase project, `@snu.edu.in` Google login, campus geofence, QR driver-phone binding, admin dashboard, security rules + tests | Done |
-| 3 | OLED-black driver screen: GO → Online → Go offline, GPS throttling, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
-| 4 | Live caddies on the student map (Moving / Parked / Signal lost / Offline), idle pause, service worker, strict CSP | Done |
+| 3 | OLED-black driver screen: GO → Online (or Charging) → Go offline, GPS throttling, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
+| 4 | Live caddies on the student map (Moving / Parked / Charging / Signal lost / Offline), idle pause, service worker, strict CSP | Done |
 
 - **Live app:** <https://snu-caddy-45q9r.firebaseapp.com> (same site:
   <https://snu-caddy-45q9r.web.app>). Admin page: `/admin.html`.
@@ -54,7 +54,7 @@ The automated tests start their own emulator, so stop `npm run emulators`
 (Ctrl-C) first:
 
 ```bash
-npm test                   # 32 security-rule tests + 39 unit tests
+npm test                   # 35 security-rule tests + 52 unit tests
 npm run test:unit          # only the unit tests (no Java needed)
 ```
 
@@ -86,7 +86,19 @@ A linked phone opens straight into the black driver screen. No login.
 2. Drive. The screen stays black and says **Online** in green. The driver
    taps nothing while driving. A problem shows as an amber or red headline
    with one plain sentence (for example **No GPS signal**: Go to an open area).
-3. At the end of the shift, tap **Go offline** twice.
+3. Parked and plugged in? Tap **Charging**. The headline turns purple and
+   students see the caddy as **Charging**, still at its place on the map.
+   Tap **Charging** again to go back to **Online**. Driving off clears it by
+   itself, and so does a new shift. Location is still shared (the usual
+   30 s heartbeat).
+4. At the end of the shift, tap **Go offline** twice.
+
+**Charging needs the driver app left open.** The phone must keep the screen
+on (Screen Wake Lock). If the phone is locked or the app goes to the
+background, the GPS and the timers stop: students see **Signal lost** after
+90 s, and **Offline** after about 10 minutes (when the browser closes the
+connection and the shift ends). A charging phone that disconnects shows
+**Offline**, not **Charging**.
 
 What the phone sends: a position when the caddy moved 5 m, or every 30 s
 when it is parked. Blurry fixes (> 20 m) and positions outside campus are
@@ -114,7 +126,7 @@ shows an "API KEY REQUIRED" watermark. The project key is already in
 ## Demo / pitch mode
 
 Tap **Try the demo** on the sign-in panel (or the **Demo** switch). Three virtual caddies drive real
-SNU roads, and a fourth caddy is parked and offline:
+SNU roads, a fourth caddy is parked and offline, and a fifth is charging:
 
 | Caddy | Route | Shows |
 | ----- | ----- | ----- |
@@ -122,16 +134,18 @@ SNU roads, and a fourth caddy is parked and offline:
 | Caddy 02 | Hostel loop: Hostel 3A, DH2, DH3, Indoor Sports Complex, Hostel 2B, DH1, Library, Health Centre (2.2 km) | Moving |
 | Caddy 03 | Academic loop: D Block, Library, Hostel 1A, Auctus Supermarket, Management Block, C Block (1.7 km) | Parked at D Block (a 100 s break), then Moving |
 | Caddy 04 | Parked at Parking 1 | Offline |
+| Caddy 05 | Plugged in at DH1 | Charging |
 
 ## What students see
 
 Each caddy shows its name, where it is ("Near Library"), how long ago it
-updated, and one of four states:
+updated, and one of five states:
 
 | State | Means |
 | ----- | ----- |
 | **Moving** | Online, and it really moved in the last 60 s |
 | **Parked** | Online, but no real move for 60 s or more |
+| **Charging** | Online, and the driver tapped **Charging**: parked and plugged in, so not one to wait for. The pin stays where it is parked ("Near DH1"). |
 | **Signal lost** | Online, but no data for 90 s (dead zone); the icon is dimmed |
 | **Offline** | The driver went offline, or the phone lost its connection |
 
@@ -194,13 +208,13 @@ js/
   enroll.js             setup codes, QR scanner, atomic enrollment
   enroll-ui.js          hidden 5-tap setup dialog
   driver.js             driver binding (stored on the phone)
-  driver-screen.js      driver screen: GO, Online, Go offline, unlink check
+  driver-screen.js      driver screen: GO, Online / Charging, Go offline, unlink check
   driver-shift.js       shift engine: GPS filter, rate limit, onDisconnect, recovery
   admin.js              admin dashboard
   map.js                Leaflet map, campus lock, tile cross-fade
   caddy-layer.js        caddy icons: glide + rotate
   caddy-list.js         list rows in the sheet
-  caddy-state.js        Moving / Parked / Signal lost / Offline
+  caddy-state.js        Moving / Parked / Charging / Signal lost / Offline
   live.js               live caddies from Firebase; closes the connection when idle
   sheet.js              bottom sheet drag / snap (side panel on laptops)
   theme.js              Auto / Light / Dark theme button
@@ -212,8 +226,9 @@ js/
   data/campus.js        GENERATED: fence polygon, landmarks
   data/demo-routes.js   GENERATED: demo routes on real roads
 sw.js                   service worker: app shell for dead zones (never live data)
-tests/database.rules.test.mjs   32 security-rule tests (npm test)
-tests/driver-shift.test.mjs     31 shift-engine tests: fake GPS, database, timers
+tests/database.rules.test.mjs   35 security-rule tests (npm test)
+tests/driver-shift.test.mjs     40 shift-engine tests: fake GPS, database, timers
+tests/caddy-state.test.mjs      the five map states and their order (Charging, Offline, Signal lost)
 tests/sw.test.mjs               the service worker saves every module it needs
 tests/csp.test.mjs              the CSP allows exactly the inline scripts (by hash)
 tests/modulepreload.test.mjs    keeps the preload lists in index.html and driver.html in sync
