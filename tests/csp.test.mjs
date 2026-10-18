@@ -6,9 +6,11 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
-const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+const root = fileURLToPath(new URL('..', import.meta.url));
+// Browsers hash inline scripts after the HTML parser turns CRLF into LF: do the same.
+const read = (f) => fs.readFileSync(path.join(root, f), 'utf8').replace(/\r\n?/g, '\n');
 const PAGES = ['index.html', 'driver.html', 'admin.html'];
 
 const hosting = JSON.parse(read('firebase.json')).hosting;
