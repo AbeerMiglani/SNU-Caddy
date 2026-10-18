@@ -46,7 +46,7 @@ flowchart LR
 | Service worker | `sw.js` | Opens the app shell in dead zones; never caches live data |
 | Admin dashboard | `admin.html`, `js/admin.js` | SNU accounts on the admin list |
 | Security rules | `database.rules.json` | Enforced by Firebase on every read and write |
-| Tests | `tests/*.test.mjs` | 35 rules tests in the emulator + 52 unit tests (`npm test`) |
+| Tests | `tests/*.test.mjs`, `tests/e2e/` | 35 rules tests in the emulator + 56 unit tests (`npm test`); 5 browser tests under the real CSP (`npm run test:e2e`); both run in CI on every PR |
 
 ## 2. Roles and sign-in
 
@@ -225,9 +225,12 @@ with a new `lastUpdated`, at most once per second.
 The rules are tested with the Firebase Emulator: 35 tests, one per attack
 or allowed action, including the exact writes a driver phone makes in a
 shift (`npm test`). The shift engine has 40 more tests with a fake GPS, a
-fake database and fake timers; the map states have 4 tests, and other tests keep the service worker list,
-the CSP hashes and the preload lists in sync (`npm run test:unit`, no
-emulator needed).
+fake database and fake timers; the map states have 4 tests, and other tests
+keep the service worker list, the CSP hashes, the preload lists and the
+pinned CDN versions in sync (`npm run test:unit`, no emulator needed). Five
+browser tests open the three pages in Chromium, served by the Hosting
+emulator with the real headers, so a CSP that blocks something fails CI
+(`npm run test:e2e`).
 
 ### Content-Security-Policy and service worker
 
