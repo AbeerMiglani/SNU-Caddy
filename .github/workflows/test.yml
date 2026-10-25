@@ -9,9 +9,10 @@ on:
 permissions:
   contents: read
 
-# A new push to the same branch or PR cancels the older run.
+# A new push to the same PR cancels the older run. Any other run (a push to
+# main) is grouped by its commit, so every merge gets its own full run.
 concurrency:
-  group: test-${{ github.ref }}
+  group: test-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:

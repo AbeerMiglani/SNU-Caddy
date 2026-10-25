@@ -374,7 +374,7 @@ test('Go offline while the first write is still pending: online:false still foll
   shift.stop('driver');
   assert.deepEqual(
     db.log.map(([k, f]) => (k === 'fields' ? f : k)),
-    ['position', { online: false }, 'cancel'],
+    ['position', { online: false, charging: false }, 'cancel'],
   );
   // The late confirmation of the old shift does not arm onDisconnect.
   db.hold.forEach((r) => r());
@@ -443,7 +443,7 @@ test('Go offline: online:false, then onDisconnect cancelled; GPS and wake lock o
   geo.fix(HOME);
   await flush();
   shift.stop('driver');
-  assert.deepEqual(db.log.slice(-2), [['fields', { online: false }], ['cancel']]);
+  assert.deepEqual(db.log.slice(-2), [['fields', { online: false, charging: false }], ['cancel']]);
   assert.equal(geo.watches.size, 0);
   assert.equal(wake.held, false);
   assert.equal(persist.saved, null);
@@ -527,7 +527,7 @@ test('app in the background for over 10 minutes: the shift ends on return', asyn
   doc.setVisible(true);
   assert.equal(last().mode, 'idle');
   assert.equal(last().ended, 'paused');
-  assert.deepEqual(db.calls('fields').at(-1), ['fields', { online: false }]);
+  assert.deepEqual(db.calls('fields').at(-1), ['fields', { online: false, charging: false }]);
 });
 
 test('app in the background for a short time: the shift goes on and asks for a fresh fix', async () => {
@@ -806,4 +806,186 @@ test('charging: driving off without a speed value clears it after about 30 m', a
   }
   assert.ok(cleared !== null && cleared <= 12, `cleared after ${cleared} s`);
   assert.equal(db.charging.at(-1), false);
+});
+
+// --- Charging: anchor, accuracy, reload, end of shift ------------------------------
+test('charging set on a stale fix (GPS dead zone): the first fresh fix is the anchor', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME, 6);
+  await flush();
+  // The caddy drives 80 m to a shed, and the GPS is quiet for a minute.
+  await wait(60_000, 1000);
+  shift.setCharging(true);
+
+  const bay = offsetM(HOME, 80, 0);
+  geo.fix(bay, 6); // the first fix at the bay, no speed value
+  await flush();
+  assert.equal(db.positions.length, 2);
+  assert.equal(db.moved.at(-1), true, 'it did move since the last write');
+  assert.equal(db.charging.at(-1), true, 'but that is not driving off the charger');
+  assert.equal(last().charging, true);
+  assert.deepEqual(persist.saved.chargeAnchor, { lat: bay.lat, lng: bay.lng, accuracy: 6 });
+
+  // Driving off from the bay still ends it.
+  await wait(2100);
+  geo.fix(offsetM(bay, 40, 0), 5, { speed: 4 });
+  await flush();
+  assert.equal(db.charging.at(-1), false);
+});
+
+test('charging set on a recent fix: that fix is the anchor', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME, 6);
+  await flush();
+  await wait(5000, 1000); // a few seconds old is still fresh
+  shift.setCharging(true);
+  assert.deepEqual(persist.saved.chargeAnchor, { lat: HOME.lat, lng: HOME.lng, accuracy: 6 });
+});
+
+test('charging: two blurry fixes 32 m apart are within their error, so it stays on', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME, 18);
+  await flush();
+  shift.setCharging(true);
+  await wait(2100);
+  geo.fix(offsetM(HOME, 32, 0), 18); // no speed value: counts as moved, but 32 < 18 + 18
+  await flush();
+  assert.equal(db.positions.length, 2);
+  assert.equal(db.moved.at(-1), true);
+  assert.equal(db.charging.at(-1), true);
+  assert.equal(last().charging, true);
+
+  // Far beyond both error radii, it is a real drive-off.
+  await wait(2100);
+  geo.fix(offsetM(HOME, 75, 0), 18);
+  await flush();
+  assert.equal(db.charging.at(-1), false);
+  assert.equal(last().charging, false);
+});
+
+test('charging: the anchor is saved with the shift and dropped when charging ends', async () => {
+  const shift = makeShift();
+  shift.go();
+  assert.equal(persist.saved.chargeAnchor, null);
+  geo.fix(HOME, 6);
+  await flush();
+  assert.equal(persist.saved.chargeAnchor, null, 'not charging: no anchor');
+  shift.setCharging(true);
+  assert.deepEqual(persist.saved.chargeAnchor, { lat: HOME.lat, lng: HOME.lng, accuracy: 6 });
+  shift.setCharging(false);
+  assert.equal(persist.saved.chargeAnchor, null);
+});
+
+test('charging after a reload: the saved anchor is kept, so a drive-off while closed is seen', async () => {
+  const first = makeShift();
+  first.go();
+  geo.fix(HOME, 6);
+  await flush();
+  first.setCharging(true);
+  const saved = persist.saved;
+  first.dispose();
+
+  for (const speed of [4, null]) {
+    db.positions.length = db.charging.length = 0;
+    const second = makeShift();
+    second.go({ since: saved.since, charging: saved.charging, chargeAnchor: saved.chargeAnchor });
+    assert.equal(last().charging, true);
+    // The app was closed; the first fix is 200 m from the charger (with or without speed).
+    geo.fix(offsetM(HOME, 200, 0), 6, { speed });
+    await flush();
+    assert.deepEqual(db.charging, [false], `speed ${speed}: students stop seeing Charging`);
+    assert.equal(last().charging, false);
+    assert.equal(persist.saved.chargeAnchor, null);
+    second.dispose();
+  }
+
+  // Still at the charger: it goes on charging.
+  db.positions.length = db.charging.length = 0;
+  const third = makeShift();
+  third.go({ since: saved.since, charging: true, chargeAnchor: saved.chargeAnchor });
+  geo.fix(offsetM(HOME, 4, 0), 6);
+  await flush();
+  assert.deepEqual(db.charging, [true]);
+  assert.equal(last().charging, true);
+});
+
+test('charging after a reload: a bad saved anchor is ignored; the first write takes its place', async () => {
+  const far = offsetM(HOME, 200, 0);
+  const bad = [
+    undefined,
+    null,
+    'x',
+    5,
+    {},
+    { lat: '28.5245', lng: 77.5745, accuracy: 6 },
+    { lat: 28.5245, lng: NaN, accuracy: 6 },
+    { lat: 28.5245, lng: 77.5745, accuracy: -1 },
+    { lat: 28.5245, lng: 77.5745, accuracy: 1e9 }, // blurrier than any accepted fix
+    { lat: 28.5245, lng: 77.5745 },
+    { lat: 95, lng: 77.5745, accuracy: 6 },
+  ];
+  for (const chargeAnchor of bad) {
+    db.positions.length = db.charging.length = 0;
+    const shift = makeShift();
+    shift.go({ charging: true, chargeAnchor });
+    geo.fix(far, 6, { speed: 4 });
+    await flush();
+    const label = JSON.stringify(chargeAnchor);
+    assert.deepEqual(db.charging, [true], `${label}: charging goes on, as before`);
+    assert.deepEqual(
+      persist.saved.chargeAnchor,
+      { lat: far.lat, lng: far.lng, accuracy: 6 },
+      `${label}: the first fix is the anchor`,
+    );
+    shift.dispose();
+  }
+});
+
+test('a saved anchor without charging is ignored', async () => {
+  const shift = makeShift();
+  shift.go({ charging: false, chargeAnchor: { lat: HOME.lat, lng: HOME.lng, accuracy: 6 } });
+  assert.equal(persist.saved.chargeAnchor, null);
+  geo.fix(offsetM(HOME, 200, 0), 6, { speed: 4 });
+  await flush();
+  assert.deepEqual(db.charging, [false]);
+  assert.equal(persist.saved.chargeAnchor, null);
+});
+
+test('Go offline while charging: the same write clears charging', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  shift.stop('driver');
+  assert.deepEqual(db.log.slice(-2), [['fields', { online: false, charging: false }], ['cancel']]);
+});
+
+test('revoked while charging: still no write (an admin clears the caddy)', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  const before = db.log.length;
+  shift.dispose('revoked');
+  assert.equal(db.log.length, before);
+});
+
+test('outside campus while charging: only online:false is written; the flag returns with the next position', async () => {
+  const shift = makeShift();
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  shift.setCharging(true);
+  await wait(2500);
+  geo.fix(OFF_CAMPUS);
+  assert.deepEqual(db.calls('fields').at(-1), ['fields', { online: false }]);
+  assert.equal(last().charging, true, 'the engine still thinks it is charging');
+  geo.fix(HOME);
+  await flush();
+  assert.equal(db.charging.at(-1), true);
 });

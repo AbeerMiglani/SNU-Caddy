@@ -54,7 +54,7 @@ The automated tests start their own emulator, so stop `npm run emulators`
 (Ctrl-C) first:
 
 ```bash
-npm test                   # 35 security-rule tests + 58 unit tests
+npm test                   # 36 security-rule tests + 75 unit tests
 npm run test:unit          # only the unit tests (no Java needed)
 npm run test:e2e           # 5 browser tests: the 3 pages in Chromium under the real CSP
 ```
@@ -95,11 +95,13 @@ A linked phone opens straight into the black driver screen. No login.
 2. Drive. The screen stays black and says **Online** in green. The driver
    taps nothing while driving. A problem shows as an amber or red headline
    with one plain sentence (for example **No GPS signal**: Go to an open area).
-3. Parked and plugged in? Tap **Charging**. The headline turns purple and
-   students see the caddy as **Charging**, still at its place on the map.
-   Tap **Charging** again to go back to **Online**. Driving off (about 30 m
-   from where it was set) clears it by itself, and so does a new shift.
-   Location is still shared (the usual 30 s heartbeat).
+3. Parked and plugged in? Tap **Charging** twice (the first tap asks
+   "Tap again to mark charging"). The headline turns purple and students see
+   the caddy as **Charging**, still at its place on the map. Tap **Charging**
+   twice again to go back to **Online**. Driving off (about 30 m from where it
+   was set, farther when the GPS is blurry) clears it by itself, and so do
+   **Go offline** and a new shift. Location is still shared (the usual 30 s
+   heartbeat).
 4. At the end of the shift, tap **Go offline** twice.
 
 **Charging needs the driver app left open.** The phone must keep the screen
@@ -144,7 +146,7 @@ SNU roads, a fourth caddy is parked and offline, and a fifth is charging:
 | Caddy 02 | Hostel loop: Hostel 3A, DH2, DH3, Indoor Sports Complex, Hostel 2B, DH1, Central Library, Health Centre (2.2 km) | Moving |
 | Caddy 03 | Academic loop: D Block, Central Library, Hostel 1A, Auctus Supermarket, Management Block, C Block (1.7 km) | Parked at D Block (a 100 s break), then Moving |
 | Caddy 04 | Parked at Parking 1 | Offline |
-| Caddy 05 | Plugged in at DH1 | Charging |
+| Caddy 05 | Plugged in at Faculty Residence | Charging |
 
 ## What students see
 
@@ -155,7 +157,7 @@ updated, and one of five states:
 | ----- | ----- |
 | **Moving** | Online, and it really moved in the last 60 s |
 | **Parked** | Online, but no real move for 60 s or more |
-| **Charging** | Online, and the driver tapped **Charging**: parked and plugged in, so not one to wait for. The pin stays where it is parked ("Near DH1"). |
+| **Charging** | Online, and the driver tapped **Charging**: parked and plugged in, so not one to wait for. The pin stays where it is parked ("Near Faculty Residence"). |
 | **Signal lost** | Online, but no data for 90 s (dead zone); the icon is dimmed |
 | **Offline** | The driver went offline, or the phone lost its connection |
 
@@ -236,9 +238,10 @@ js/
   data/campus.js        GENERATED: fence polygon, landmarks
   data/demo-routes.js   GENERATED: demo routes on real roads
 sw.js                   service worker: app shell for dead zones (never live data)
-tests/database.rules.test.mjs   35 security-rule tests (npm test)
-tests/driver-shift.test.mjs     40 shift-engine tests: fake GPS, database, timers
+tests/database.rules.test.mjs   36 security-rule tests (npm test)
+tests/driver-shift.test.mjs     52 shift-engine tests: fake GPS, database, timers
 tests/caddy-state.test.mjs      the five map states and their order (Charging, Offline, Signal lost)
+tests/demo.test.mjs             the demo: charging caddy clear of the routes, one send per caddy
 tests/sw.test.mjs               the service worker saves every module it needs
 tests/csp.test.mjs              the CSP allows exactly the inline scripts (by hash)
 tests/modulepreload.test.mjs    keeps the preload lists in index.html and driver.html in sync
@@ -259,7 +262,10 @@ python3 tools/build_campus_data.py
 ```
 
 It uses only the Python standard library. To change the demo routes or the
-landmark names, edit the lists at the top of that file.
+landmark names, edit the lists at the top of that file. It also places the
+parked (Caddy 04) and charging (Caddy 05) demo caddies, and stops with an
+error if the charging caddy's landmark is missing or within 80 m of a demo
+route.
 
 Please check the landmark names with someone who knows the campus:
 
