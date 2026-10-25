@@ -9,11 +9,11 @@ on:
 permissions:
   contents: read
 
-# A new push to the same PR cancels the older run. On main every commit gets
-# its own full run, so two quick merges are both tested.
+# A new push to the same PR cancels the older run. Any other run (a push to
+# main) is grouped by its commit, so every merge gets its own full run.
 concurrency:
-  group: test-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: test-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   # Security rules (Database emulator) and unit tests.

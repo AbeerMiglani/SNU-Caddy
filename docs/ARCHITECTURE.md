@@ -234,15 +234,15 @@ only together with a new `lastUpdated`), no extra fields (a `status` field
 is refused), and the caddy must exist in `fleet`. GPS fields change only
 with a new `lastUpdated`, at most once per second.
 
-The rules are tested with the Firebase Emulator: 35 tests, one per attack
+The rules are tested with the Firebase Emulator: 36 tests, one per attack
 or allowed action, including the exact writes a driver phone makes in a
-shift (`npm test`). The shift engine has 42 more tests with a fake GPS, a
-fake database and fake timers; the map states have 4 tests, and other tests
-keep the service worker list, the CSP hashes, the preload lists and the
-pinned CDN versions in sync (`npm run test:unit`, no emulator needed). Five
-browser tests open the three pages in Chromium, served by the Hosting
-emulator with the real headers, so a CSP that blocks something fails CI
-(`npm run test:e2e`).
+shift (`npm test`). The shift engine has 52 more tests with a fake GPS, a
+fake database and fake timers; the map states have 4 tests, the demo 7,
+and other tests keep the service worker list, the CSP hashes, the preload
+lists and the pinned CDN versions in sync (`npm run test:unit`, no emulator
+needed). Five browser tests open the three pages in Chromium, served by
+the Hosting emulator with the real headers, so a CSP that blocks something
+fails CI (`npm run test:e2e`).
 
 ### Content-Security-Policy and service worker
 

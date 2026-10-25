@@ -157,7 +157,7 @@ updated, and one of five states:
 | ----- | ----- |
 | **Moving** | Online, and it really moved in the last 60 s |
 | **Parked** | Online, but no real move for 60 s or more |
-| **Charging** | Online, and the driver tapped **Charging**: parked and plugged in, so not one to wait for. The pin stays where it is parked ("Near DH1"). |
+| **Charging** | Online, and the driver tapped **Charging**: parked and plugged in, so not one to wait for. The pin stays where it is parked ("Near Faculty Residence"). |
 | **Signal lost** | Online, but no data for 90 s (dead zone); the icon is dimmed |
 | **Offline** | The driver went offline, or the phone lost its connection |
 
