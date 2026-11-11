@@ -115,6 +115,10 @@ Add other admins the same way. To remove an admin, delete their entry.
 
 ## Step 8: Add the caddies
 
+The **Caddies** table shows what students see of each caddy now, and
+whether a phone is linked. **Remove** deletes a caddy with its live state
+and its phone link.
+
 On the admin page, under **Caddies**, add each caddy: number `1`, name
 `Caddy 01`; number `2`, name `Caddy 02`; and so on.
 

@@ -64,3 +64,8 @@ for (const [lib, places] of Object.entries(LIBS)) {
     assert.equal(distinct.size, 1, `${lib} versions differ:\n  ${found.join('\n  ')}`);
   });
 }
+
+test('the app version in js/config.js is the package.json version', () => {
+  const shown = read('js/config.js').match(/APP_VERSION = '([^']+)'/)?.[1];
+  assert.equal(shown, JSON.parse(read('package.json')).version);
+});

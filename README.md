@@ -9,12 +9,15 @@ It is a mobile web app (PWA): plain HTML, CSS and JavaScript, with no build step
 | 2 | Firebase project, `@snu.edu.in` Google login, campus geofence, QR driver-phone binding, admin dashboard, security rules + tests | Done |
 | 3 | OLED-black driver screen: GO → Online (or Charging) → Go offline, GPS throttling, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
 | 4 | Live caddies on the student map (Moving / Parked / Charging / Signal lost / Offline), idle pause, service worker, strict CSP | Done |
+| 5 | Version 1.0: the student's own position and the distance to each caddy, place names on the map, About and privacy, live fleet state and "Remove" on the admin page, 404 page, launch checklist | Done |
 
 - **Live app:** <https://snu-caddy-45q9r.firebaseapp.com> (same site:
   <https://snu-caddy-45q9r.web.app>). Admin page: `/admin.html`.
 - **For the SNU IT department:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
   (system design, security rules, threat model, free-tier budget, edge cases).
 - **Set up Firebase (free Spark plan):** [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).
+- **Before the launch:** [`docs/LAUNCH_CHECKLIST.md`](docs/LAUNCH_CHECKLIST.md)
+  (the steps that only the project owner can do).
 
 ## Run it on your computer
 
@@ -54,9 +57,9 @@ The automated tests start their own emulator, so stop `npm run emulators`
 (Ctrl-C) first:
 
 ```bash
-npm test                   # 36 security-rule tests + 75 unit tests
+npm test                   # 37 security-rule tests + 83 unit tests
 npm run test:unit          # only the unit tests (no Java needed)
-npm run test:e2e           # 5 browser tests: the 3 pages in Chromium under the real CSP
+npm run test:e2e           # 6 browser tests: the 3 pages in Chromium under the real CSP
 ```
 
 `test:e2e` needs Chromium once: `npx playwright install chromium`. It
@@ -85,6 +88,11 @@ local IP address (for example `192.168.1.20`) and open
 
 To link a driver phone: on the phone, tap the name **SNU Caddy** at the top
 **5 times quickly**, then scan the setup QR code from the admin page.
+
+The admin page lists every caddy with what students see of it now
+(for example "Moving · 5 s ago" or "Offline · last seen 2 h ago") and
+whether a phone is linked. **Remove** deletes a caddy together with its
+live state and the link of its phone.
 
 ## Driver screen (daily use)
 
@@ -137,8 +145,11 @@ shows an "API KEY REQUIRED" watermark. The project key is already in
 
 ## Demo / pitch mode
 
-Tap **Try the demo** on the sign-in panel (or the **Demo** switch). Three virtual caddies drive real
-SNU roads, a fourth caddy is parked and offline, and a fifth is charging:
+Tap **Try the demo** on the sign-in panel, or add `?demo=1` to the address.
+The **Demo** switch in the list shows only while the demo runs (it is the
+way out); a signed-in student sees real caddies only. Three virtual
+caddies drive real SNU roads, a fourth caddy is parked and offline, and a
+fifth is charging:
 
 | Caddy | Route | Shows |
 | ----- | ----- | ----- |
@@ -151,7 +162,7 @@ SNU roads, a fourth caddy is parked and offline, and a fifth is charging:
 ## What students see
 
 Each caddy shows its name, where it is ("Near Central Library"), how long ago it
-updated, and one of five states:
+updated, how far it is from the student ("250 m"), and one of five states:
 
 | State | Means |
 | ----- | ----- |
@@ -164,6 +175,25 @@ updated, and one of five states:
 Live data runs only while the app is on screen, on campus and signed in.
 After 5 minutes without a touch it pauses ("Live map paused. Tap to
 resume.") and closes its database connection.
+
+**The student's own position.** The campus check already takes a location
+fix, so the same fix puts a blue dot on the map and gives the straight-line
+distance to each caddy. The position never leaves the phone.
+
+- The dot shows when the fix is good to 200 m; a rough fix gets an error
+  circle. Distances show when the fix is good to 75 m.
+- **Show my location** (the button above "Show the whole campus") takes one
+  precise fix and moves the map there.
+- A fix older than 3 minutes is "last known": the dot turns grey and the
+  distances hide until the next check.
+
+**Place names.** From street level on (zoom 16.5), the map names the campus
+places of the "Near …" texts (DH1, Central Library, the hostels). The
+basemap itself names almost nothing on campus.
+
+**About.** The (i) button in the top bar explains the five states and what
+the app does with location and sign-in. It also shows the help address
+(`SUPPORT_EMAIL` in `js/config.js`).
 
 Each virtual caddy acts like a real driver phone. It makes one GPS fix per
 second with a small error, and sometimes a blurry fix (> 20 m). The same
@@ -189,8 +219,11 @@ The demo is repeatable: it uses a fixed random seed, so every pitch looks the sa
 - **Service worker**: keeps a copy of the app, so it opens in a dead zone, and a weak
   signal never stalls it for more than 4 s. App files are checked with Hosting on each
   visit (mostly small "not changed" answers), so a new version is used at once.
-- **Geofence**: one quick, low-accuracy location check when the app opens, then one
-  every 5 minutes while it stays on screen. No continuous GPS on student phones.
+- **Geofence and own position**: one quick, low-accuracy location check when the app
+  opens, then one a minute while it is on screen and in use (the idle pause stops
+  it; outside campus it is one every 5 minutes). The GPS is used only for a tap on
+  **Show my location**, when a rough fix near the fence cannot decide, and to confirm
+  that a student really left campus. No continuous GPS on student phones.
 - **Driver phones** open `driver.html`: no map, no tiles, no Leaflet, pure black.
   The screen dims after 20 s without a touch. GPS runs only between GO and Go offline.
 - **No endless animations**: the selected caddy pulses twice, then stays still.
@@ -199,12 +232,14 @@ The demo is repeatable: it uses a fixed random seed, so every pitch looks the sa
 ## Project structure
 
 ```
-index.html              student app (map, sign-in, geofence, hidden driver setup)
+index.html              student app (map, sign-in, geofence, About, hidden driver setup)
 driver.html             OLED-black driver screen (linked phones only)
 admin.html              admin dashboard (fleet, setup codes, linked phones)
+404.html                "Page not found" (Firebase Hosting sends it for unknown addresses)
 manifest.webmanifest    PWA install data
 database.rules.json     Firebase security rules (the real access control)
 firebase.json           hosting, security headers, emulators
+LICENSE                 MIT licence for the code
 css/
   app.css               student app + shared tokens (light / dark)
   driver.css            driver screen
@@ -232,23 +267,25 @@ js/
   theme.js              Auto / Light / Dark theme button
   demo.js               demo simulator
   lib/geo.js            distance, bearing, small helpers
+  lib/format.js         short texts: "5 s ago", "250 m"
   lib/polygon.js        point-in-polygon, distance to the fence
   lib/ping-gate.js      5 m / 30 s / 20 m rules (demo and driver phones)
   lib/wake-lock.js      Screen Wake Lock, taken again after the app was hidden
   data/campus.js        GENERATED: fence polygon, landmarks
   data/demo-routes.js   GENERATED: demo routes on real roads
 sw.js                   service worker: app shell for dead zones (never live data)
-tests/database.rules.test.mjs   36 security-rule tests (npm test)
+tests/database.rules.test.mjs   37 security-rule tests (npm test)
 tests/driver-shift.test.mjs     52 shift-engine tests: fake GPS, database, timers
 tests/caddy-state.test.mjs      the five map states and their order (Charging, Offline, Signal lost)
 tests/demo.test.mjs             the demo: charging caddy clear of the routes, one send per caddy
+tests/student.test.mjs          time and distance texts; the campus check and the own position
 tests/sw.test.mjs               the service worker saves every module it needs
 tests/csp.test.mjs              the CSP allows exactly the inline scripts (by hash)
 tests/modulepreload.test.mjs    keeps the preload lists in index.html and driver.html in sync
-tests/versions.test.mjs         every pinned CDN version is the same in every file
+tests/versions.test.mjs         every pinned CDN version, and the app version, is the same in every file
 tests/e2e/browser.test.mjs      the 3 pages in Chromium under the real CSP (npm run test:e2e)
 tools/build_campus_data.py      makes the two data files from OpenStreetMap
-docs/                   architecture + Firebase setup guide
+docs/                   architecture, Firebase setup guide, launch checklist
 assets/                 icons, Inter font
 ```
 
@@ -278,6 +315,10 @@ Please check the landmark names with someone who knows the campus:
   are power pylons), so these are not on the map yet.
 
 ## Credits and licences
+
+The SNU Caddy code is open to all under the [MIT licence](LICENSE): any use
+is fine, with the copyright notice kept. The parts below keep their own
+licences.
 
 - Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL 1.0)
 - Basemaps © [CARTO](https://carto.com/attributions)

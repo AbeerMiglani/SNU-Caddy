@@ -396,6 +396,27 @@ test('going offline also clears charging: the bound phone and an admin may write
   assert.equal((await read()).charging, true);
 });
 
+test('remove a caddy: an admin deletes its name, state and phone link in one update', async () => {
+  // The same multi-path update as "Remove" on the admin page (js/admin.js).
+  const removal = {
+    'fleet/caddy_02': null,
+    'caddies/caddy_02': null,
+    'drivers/drv2': null,
+  };
+  await assertFails(update(ref(db('stu', student)), removal));
+  await assertFails(update(ref(db('drv2', anon)), removal)); // not even its own phone
+  await assertSucceeds(update(ref(db('adm', adminTok)), removal));
+  let root;
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    root = (await get(ref(ctx.database()))).val();
+  });
+  assert.deepEqual(Object.keys(root.fleet), ['caddy_01']);
+  assert.equal(root.caddies, undefined, 'no ghost caddy for students');
+  assert.equal(root.drivers, undefined);
+  // The removed caddy's phone can no longer bring it back.
+  await assertFails(update(ref(db('drv2', anon), 'caddies/caddy_02'), pos()));
+});
+
 test('students cannot make themselves admin', async () => {
   await assertFails(set(ref(db('stu', student), 'admins/stu'), true));
 });

@@ -1,8 +1,8 @@
 // Full-screen Leaflet map with CartoDB tiles, locked to the SNU campus.
 /* global L */
 
-import { MAP, MAX_BOUNDS, TILES } from './config.js';
-import { CAMPUS_BBOX, CAMPUS_POLYGON } from './data/campus.js';
+import { MAP, MAX_BOUNDS, ME, TILES } from './config.js';
+import { CAMPUS_BBOX, CAMPUS_POLYGON, LANDMARKS } from './data/campus.js';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -136,6 +136,81 @@ export function createMap(el, initialTheme) {
     weight: 1.5,
   }).addTo(map);
 
+  // --- Place names ---------------------------------------------------------
+  // The basemap names almost nothing on campus. From street level on, the
+  // places of the "Near <name>" texts are named on the map, so a student can
+  // tell where a caddy is. Plain text below the caddy icons; not interactive.
+  map.createPane('places').style.zIndex = 450; // above the mask, below the markers
+  const places = L.layerGroup(
+    LANDMARKS.filter((l) => !MAP.unlabelled.includes(l.name)).map((l) => {
+      const marker = L.marker([l.lat, l.lng], {
+        pane: 'places',
+        icon: L.divIcon({ className: 'place', html: '', iconSize: [0, 0] }),
+        interactive: false,
+        keyboard: false,
+      });
+      marker.on('add', () => {
+        const label = document.createElement('span');
+        label.className = 'place__name';
+        label.textContent = l.name;
+        marker.getElement().replaceChildren(label);
+        // Decoration for screen readers: the caddy list says "Near <name>".
+        marker.getElement().setAttribute('aria-hidden', 'true');
+      });
+      return marker;
+    }),
+  );
+  function showPlaces() {
+    if (map.getZoom() >= MAP.placesFromZoom) map.addLayer(places);
+    else map.removeLayer(places);
+  }
+  map.on('zoomend', showPlaces);
+
+  // --- The student's own position ("you are here") --------------------------
+  // A dot, and an error circle when the fix is rough. Not interactive, and
+  // below the caddy icons: a tap on a caddy under the dot still selects it.
+  let meDot = null;
+  let meCircle = null;
+
+  /**
+   * @param {{ lat: number, lng: number, accuracy: number } | null} pos
+   * @param {{ stale?: boolean }} [opts]  stale: an old fix, drawn dimmed
+   */
+  function setMe(pos, { stale = false } = {}) {
+    if (!pos || !(pos.accuracy <= ME.showWithinM)) {
+      meDot?.remove();
+      meCircle?.remove();
+      meDot = meCircle = null;
+      return;
+    }
+    const at = [pos.lat, pos.lng];
+    if (!meDot) {
+      meDot = L.marker(at, {
+        icon: L.divIcon({ className: 'me', html: '', iconSize: [22, 22], iconAnchor: [11, 11] }),
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: -3000,
+      }).addTo(map);
+      meDot.getElement().setAttribute('aria-hidden', 'true'); // the list gives the distances
+    } else meDot.setLatLng(at);
+    meDot.getElement().classList.toggle('is-stale', stale);
+
+    if (pos.accuracy > ME.circleAboveM && !stale) {
+      if (!meCircle) {
+        meCircle = L.circle(at, {
+          radius: pos.accuracy,
+          className: 'me-circle',
+          interactive: false,
+          stroke: false,
+          fillOpacity: 1, // the colour and its opacity come from CSS
+        }).addTo(map);
+      } else meCircle.setLatLng(at).setRadius(pos.accuracy);
+    } else {
+      meCircle?.remove();
+      meCircle = null;
+    }
+  }
+
   // --- Camera limits that respect the sheet / side panel -------------------
   // Leaflet's maxBounds and zoom floor work on the whole map box, but part of
   // it is under the bottom sheet or the side panel. So: (1) the zoom floor lets
@@ -166,6 +241,7 @@ export function createMap(el, initialTheme) {
 
   map.fitBounds(campusBounds);
   updateLimits();
+  showPlaces();
   // The lock is in pixels, so it changes with the zoom level.
   map.on('zoomend resize', updateLimits);
 
@@ -182,6 +258,7 @@ export function createMap(el, initialTheme) {
   return {
     map,
     setTheme,
+    setMe,
 
     /** The sheet or side panel moved: update the camera limits. */
     setCover(next) {

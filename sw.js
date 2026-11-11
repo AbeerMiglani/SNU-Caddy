@@ -11,7 +11,7 @@
 //    Firebase's own /__/ pages always go to the network. Live data must never
 //    come from a cache.
 
-const CACHE = 'snu-caddy-v7'; // bump in every release that changes a SHELL file
+const CACHE = 'snu-caddy-v8'; // bump in every release that changes a SHELL file
 const SLOW_MS = 4000; // weak signal: open the saved page after this long
 
 /**
@@ -50,6 +50,7 @@ const SHELL = [
   'js/firebase.js',
   'js/geofence.js',
   'js/lib/five-taps.js',
+  'js/lib/format.js',
   'js/lib/geo.js',
   'js/lib/ping-gate.js',
   'js/lib/polygon.js',

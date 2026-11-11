@@ -4,7 +4,7 @@
 import { CaddyLayer } from './caddy-layer.js';
 import { createCaddyList } from './caddy-list.js';
 import { caddyState } from './caddy-state.js';
-import { LIVE } from './config.js';
+import { APP_VERSION, LIVE, ME, SUPPORT_EMAIL } from './config.js';
 import { DemoSimulator } from './demo.js';
 import { FIREBASE_ON } from './firebase.js';
 import { onFiveTaps } from './lib/five-taps.js';
@@ -31,6 +31,11 @@ let selectedId = null;
 /** @type {'off'|'connecting'|'live'|'reconnecting'|'denied'} */
 let liveStatus = 'off';
 let idlePaused = false;
+/**
+ * The student's own position (from the campus check; it stays on this phone).
+ * @type {import('./geofence.js').Position | null}
+ */
+let me = null;
 
 // A tap on a map icon also brings that caddy's row into view in the sheet.
 const layer = new CaddyLayer(mapApi.map, { onSelect: (id) => select(id, { reveal: true }) });
@@ -71,7 +76,27 @@ function renderNow(remeasure = false) {
   sheetEl.classList.toggle('is-loading', loading);
   // The sheet sees by itself when the header or the first row changes size (sheet.js);
   // it needs a call only when what it shows changes kind: list, empty text or card.
-  if (list.render(caddies, selectedId, summaryNote()) || changed || remeasure) sheet.refresh();
+  const shape = list.render(caddies, selectedId, summaryNote(), distanceOrigin());
+  if (shape || changed || remeasure) sheet.refresh();
+}
+
+// --- The student's own position ---------------------------------------------------
+const meIsStale = () => Boolean(me) && Date.now() - me.at > ME.staleMs;
+
+/** Distances are shown only from a position that is sharp and new enough. */
+function distanceOrigin() {
+  return me && me.accuracy <= ME.distanceWithinM && !meIsStale() ? me : null;
+}
+
+function showMe() {
+  mapApi.setMe(me, { stale: meIsStale() });
+  $('#locate-btn').hidden = !me;
+}
+
+function setMe(position) {
+  me = position;
+  showMe();
+  scheduleRender();
 }
 
 /** A sheet summary that replaces the caddy count, or null. */
@@ -149,6 +174,24 @@ document.addEventListener(
 );
 $('#recenter-btn').addEventListener('click', () => mapApi.fitCampus(sheet.cover()));
 
+// "Show my location": a position from the last seconds is used as it is;
+// otherwise the phone takes one precise fix (the button is busy meanwhile).
+$('#locate-btn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  if (btn.getAttribute('aria-disabled') === 'true') return;
+  let at = me && Date.now() - me.at <= ME.freshMs ? me : null;
+  if (!at && gate) {
+    btn.setAttribute('aria-disabled', 'true');
+    try {
+      at = await gate.locate();
+    } finally {
+      btn.setAttribute('aria-disabled', 'false');
+    }
+  }
+  at ??= me; // no new fix: the last known place (null when the student left campus)
+  if (at) mapApi.focus(at, sheet.cover());
+});
+
 // --- Live data from Firebase ------------------------------------------------------
 const live = createLive({
   onUpdate: upsert,
@@ -179,7 +222,7 @@ const gate = FIREBASE_ON
         accountEmail: $('#account-email'),
         signOut: $('#sign-out'),
         // The top bar stays usable: theme, and 5 taps on the name for driver setup.
-        behindLogin: [$('#map'), $('#recenter-btn'), $('#sheet')],
+        behindLogin: [$('#map'), $('#recenter-btn'), $('#locate-btn'), $('#sheet')],
       },
       {
         // Live data runs only while the gate allows it (see student-gate.js).
@@ -188,6 +231,7 @@ const gate = FIREBASE_ON
           if (on) live.attach(fb);
           else live.detach();
         },
+        onPosition: setMe,
         onChange: () => {
           $('#sheet').classList.toggle('is-gated', !$('#gate').hidden);
           renderNow(true); // sets the summary ('' under a card) before the sheet is measured
@@ -227,6 +271,11 @@ function setDemo(on) {
   if (on) demo.start();
   else demo.stop();
   demoSwitch.setAttribute('aria-checked', String(on));
+  // With sign-in set up, students get real caddies: the switch is there only
+  // to leave the demo. (Without a Firebase project, the demo is all there is.)
+  const hadFocus = document.activeElement === demoSwitch;
+  demoSwitch.hidden = FIREBASE_ON && !on;
+  if (hadFocus && demoSwitch.hidden) $('#sheet-title').focus({ preventScroll: true });
   gate?.setDemo(on);
   renderNow();
 }
@@ -236,6 +285,19 @@ $('#login-demo').addEventListener('click', () => {
   setDemo(true);
   demoSwitch.focus(); // The focused button just disappeared; keep keyboard focus nearby.
 });
+
+// About: what the words mean, and what the app does with location.
+const about = $('#about');
+$('#about-version').textContent = `Version ${APP_VERSION}`;
+if (SUPPORT_EMAIL) {
+  const mail = $('#about-mail');
+  mail.textContent = SUPPORT_EMAIL;
+  mail.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('SNU Caddy')}`;
+  $('#about-help').hidden = false;
+}
+$('#about-btn').addEventListener('click', () => about.showModal());
+// A tap on the dimmed page around the dialog closes it, like its Close button.
+about.addEventListener('click', (e) => e.target === about && about.close());
 
 // Hidden driver-phone setup, loaded only when used: 5 quick taps on the name, or a
 // #enroll= link from the admin QR. The top bar stays usable on the sign-in screen,
@@ -254,6 +316,7 @@ function startLabelTimer() {
     labelTimer = setInterval(() => {
       refreshStates();
       checkIdle();
+      showMe(); // an old position dims
       scheduleRender();
     }, LABEL_REFRESH_MS);
   }
@@ -272,6 +335,7 @@ document.addEventListener('visibilitychange', () => {
     markActive(); // opening the app again counts as a touch
     demo.resume();
     refreshStates();
+    showMe();
     startLabelTimer();
     renderNow();
   }
@@ -281,7 +345,7 @@ document.addEventListener('visibilitychange', () => {
 renderNow();
 mapApi.fitCampus(sheet.cover(), { animate: false });
 if (!document.hidden) startLabelTimer();
-if (params.has('demo') && params.get('demo') !== '0') setDemo(true);
+setDemo(params.has('demo') && params.get('demo') !== '0');
 
 // Offline app shell (sw.js): the app opens in a dead zone, too. It is not
 // needed for the first paint, so it registers after the page has loaded.

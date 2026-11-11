@@ -32,6 +32,7 @@
   --fill-2: #f6f6f6; /* hover, selected row */
   --map-bg: #f6f6f4;
   --focus: #276ef1;
+  --me: #276ef1; /* "you are here": the one blue dot on the map */
   --float: 0 1px 3px rgba(0, 0, 0, 0.2); /* the one shadow: things over the map */
 
   /* Caddy states. Colour is never the only signal: each state has a word. */
@@ -76,6 +77,7 @@
   --fill-2: #141414;
   --map-bg: #0e0e0e;
   --float: 0 1px 3px rgba(0, 0, 0, 0.8);
+  --me: #5b91f5; /* a lighter blue: the dark map swallows the light-theme one */
 
   --error-text: #ff5a4f; /* 6.8:1 on black */
 
@@ -280,6 +282,56 @@ button {
   stroke-opacity: var(--outline-opacity);
 }
 
+/* Place names (map.js): small, grey, with a halo in the map colour so they
+   read on any tile. They show from street level on. */
+.place {
+  pointer-events: none;
+}
+
+.place__name {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-shadow:
+    0 0 2px var(--map-bg),
+    0 0 2px var(--map-bg),
+    0 0 4px var(--map-bg),
+    0 0 4px var(--map-bg);
+}
+
+/* "You are here": a blue dot with a ring in the page colour. */
+.me {
+  pointer-events: none;
+}
+
+.me::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 3px solid var(--bg);
+  border-radius: 50%;
+  background: var(--me);
+  box-shadow: var(--float);
+}
+
+/* An old fix (the app was left open): where the student was, not is. */
+.me.is-stale::after {
+  background: var(--state-offline);
+}
+
+/* The error circle of a rough fix. */
+.me-circle {
+  fill: var(--me);
+  fill-opacity: 0.14;
+}
+
 /* Attribution stays readable just above the bottom sheet. */
 .leaflet-bottom {
   bottom: calc(var(--sheet-visible) + var(--safe-bottom));
@@ -325,7 +377,18 @@ button {
   cursor: pointer;
 }
 
-/* Sheet at full: the button would sit under the top bar. */
+/* "Show my location" sits above "Show the whole campus". */
+.map-btn--locate {
+  bottom: calc(var(--sheet-visible) + var(--safe-bottom) + 80px);
+}
+
+/* Busy: the phone is taking a precise fix. */
+.map-btn[aria-disabled='true'] {
+  color: var(--text-3);
+  cursor: progress;
+}
+
+/* Sheet at full: the buttons would sit under the top bar. */
 .sheet-full .map-btn {
   visibility: hidden;
 }
@@ -362,6 +425,13 @@ button {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.topbar__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
 }
 
 .icon-btn {
@@ -664,18 +734,58 @@ button {
   text-overflow: ellipsis;
 }
 
-/* Place and age: up to two lines on narrow screens, so the age is not cut. */
+/* Place and age, with a dot between them. Each part stays whole; on a narrow
+   screen the age goes to a second line. Every part has its dot in front, and
+   the parts sit 14 px to the left, where the box cuts them off: so the first
+   part of each line shows no dot. */
 .row__meta {
-  display: -webkit-box;
+  display: block;
   margin-top: 2px;
   white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+}
+
+.row__parts {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: -14px;
+}
+
+.row__parts > span {
+  overflow: hidden;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.row__parts > span::before {
+  content: '·';
+  display: inline-block;
+  width: 14px;
+  text-align: center;
 }
 
 .row[data-state='offline'] .row__title {
   color: var(--text-2);
+}
+
+/* Right column: the state, and under it the distance from the student. */
+.row__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.row__dist {
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.row__dist:has(> :first-child:empty) {
+  display: none;
 }
 
 /* State: a word with a small dot. Only "Moving" is bold. */
@@ -1004,6 +1114,91 @@ button {
   gap: 8px;
 }
 
+/* ----------------------------------------------------------------- About -- */
+
+/* The same dialog as the driver setup, with running text. */
+.about .enroll__inner {
+  gap: 12px;
+}
+
+.about__text,
+.about__list,
+.about__meta {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.about__head {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
+  letter-spacing: -0.01em;
+}
+
+#about-help {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.about__link {
+  color: var(--fg);
+  font-weight: 500;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.about__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 18px;
+}
+
+.about__meta {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The five states: the same dot and word as in the list. */
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.legend > div {
+  display: grid;
+  grid-template-columns: 8px 92px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.legend > div::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+
+.legend dt {
+  font-weight: 500;
+}
+
+.legend dd {
+  margin: 0;
+  color: var(--text-2);
+}
+
 /* ----------------------------------------------------------- Caddy icons -- */
 
 .caddy-marker {
@@ -1158,6 +1353,10 @@ button {
 
   .map-btn {
     bottom: calc(var(--safe-bottom) + 28px);
+  }
+
+  .map-btn--locate {
+    bottom: calc(var(--safe-bottom) + 80px);
   }
 
   .kbd #map:focus-visible::after {
