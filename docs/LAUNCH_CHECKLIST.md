@@ -21,8 +21,7 @@ owner, an admin, or someone on campus. Do them in this order.
 - [ ] **A second admin.** Add one more trusted person under `admins` (see
       `docs/FIREBASE_SETUP.md`, step 7), so that one absent admin does not
       block the service.
-- [ ] **Licence.** The repository has no `LICENSE` file. Decide if the code
-      stays private or gets a licence.
+- [x] **Licence.** MIT (`LICENSE`): the code is open to all, for any use.
 
 ## 2. People (SNU side)
 
@@ -32,8 +31,9 @@ owner, an admin, or someone on campus. Do them in this order.
 - [ ] **The privacy text is approved.** The **(i)** button in the app shows
       what the app does with student location (it stays on the phone) and
       with sign-in. Ask SNU IT to read it.
-- [ ] **Someone owns the service.** Decide who students and drivers contact
-      when something is wrong. The app shows no contact address.
+- [ ] **Someone reads the help address.** The About dialog tells students to
+      write to the address in `js/config.js` (`SUPPORT_EMAIL`). Make sure
+      that mailbox is read, and tell drivers who to call.
 
 ## 3. Campus data (someone who knows the campus)
 

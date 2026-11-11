@@ -11,6 +11,7 @@
       "package.json",
       "package-lock.json",
       "database.rules.json",
+      "LICENSE",
       "**/.*",
       "**/*.log",
       "**/.*/**",

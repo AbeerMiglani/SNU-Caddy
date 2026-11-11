@@ -186,6 +186,7 @@ test('a signed-in student on campus sees a live caddy', async () => {
   await page.click('#about-btn');
   assert.ok(await page.evaluate(() => document.querySelector('#about').open));
   assert.match(await page.textContent('#about-version'), /^Version \d+\.\d+\.\d+$/);
+  assert.match(await page.getAttribute('#about-mail', 'href'), /^mailto:[^@]+@[^@?]+\?subject=/);
   await page.click('#about-close');
   assert.ok(!(await page.evaluate(() => document.querySelector('#about').open)));
   assert.deepEqual(problems, []);

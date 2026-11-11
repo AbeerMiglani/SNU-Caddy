@@ -4,7 +4,7 @@
 import { CaddyLayer } from './caddy-layer.js';
 import { createCaddyList } from './caddy-list.js';
 import { caddyState } from './caddy-state.js';
-import { APP_VERSION, LIVE, ME } from './config.js';
+import { APP_VERSION, LIVE, ME, SUPPORT_EMAIL } from './config.js';
 import { DemoSimulator } from './demo.js';
 import { FIREBASE_ON } from './firebase.js';
 import { onFiveTaps } from './lib/five-taps.js';
@@ -289,6 +289,12 @@ $('#login-demo').addEventListener('click', () => {
 // About: what the words mean, and what the app does with location.
 const about = $('#about');
 $('#about-version').textContent = `Version ${APP_VERSION}`;
+if (SUPPORT_EMAIL) {
+  const mail = $('#about-mail');
+  mail.textContent = SUPPORT_EMAIL;
+  mail.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('SNU Caddy')}`;
+  $('#about-help').hidden = false;
+}
 $('#about-btn').addEventListener('click', () => about.showModal());
 // A tap on the dimmed page around the dialog closes it, like its Close button.
 about.addEventListener('click', (e) => e.target === about && about.close());

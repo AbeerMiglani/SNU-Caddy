@@ -5,6 +5,11 @@ import { CAMPUS_BBOX } from './data/campus.js';
 export const APP_NAME = 'SNU Caddy';
 /** Shown in the About dialog. Keep in step with package.json (tests/versions.test.mjs). */
 export const APP_VERSION = '1.0.0';
+/**
+ * Who students write to when something is wrong (the About dialog shows it).
+ * Set it to '' to show no contact.
+ */
+export const SUPPORT_EMAIL = 'satishsystems@gmail.com';
 
 /** Campus centre, as given by the SNU team. */
 export const CAMPUS_CENTER = [28.5267, 77.5754];

@@ -192,7 +192,8 @@ places of the "Near …" texts (DH1, Central Library, the hostels). The
 basemap itself names almost nothing on campus.
 
 **About.** The (i) button in the top bar explains the five states and what
-the app does with location and sign-in.
+the app does with location and sign-in. It also shows the help address
+(`SUPPORT_EMAIL` in `js/config.js`).
 
 Each virtual caddy acts like a real driver phone. It makes one GPS fix per
 second with a small error, and sometimes a blurry fix (> 20 m). The same
@@ -238,6 +239,7 @@ admin.html              admin dashboard (fleet, setup codes, linked phones)
 manifest.webmanifest    PWA install data
 database.rules.json     Firebase security rules (the real access control)
 firebase.json           hosting, security headers, emulators
+LICENSE                 MIT licence for the code
 css/
   app.css               student app + shared tokens (light / dark)
   driver.css            driver screen
@@ -313,6 +315,10 @@ Please check the landmark names with someone who knows the campus:
   are power pylons), so these are not on the map yet.
 
 ## Credits and licences
+
+The SNU Caddy code is open to all under the [MIT licence](LICENSE): any use
+is fine, with the copyright notice kept. The parts below keep their own
+licences.
 
 - Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL 1.0)
 - Basemaps © [CARTO](https://carto.com/attributions)

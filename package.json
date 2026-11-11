@@ -2,6 +2,7 @@
   "name": "snu-caddy",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "description": "Live campus caddy tracker for Shiv Nadar University (PWA, no build step).",
   "type": "module",
   "scripts": {
