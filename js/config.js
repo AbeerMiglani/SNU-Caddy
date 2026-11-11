@@ -3,6 +3,8 @@
 import { CAMPUS_BBOX } from './data/campus.js';
 
 export const APP_NAME = 'SNU Caddy';
+/** Shown in the About dialog. Keep in step with package.json (tests/versions.test.mjs). */
+export const APP_VERSION = '1.0.0';
 
 /** Campus centre, as given by the SNU team. */
 export const CAMPUS_CENTER = [28.5267, 77.5754];
@@ -24,6 +26,10 @@ export const MAP = {
   zoomSnap: 0.5,
   /** Zoom used when the camera goes to one caddy. */
   focusZoom: 17.5,
+  /** Place names (the landmarks of the "Near …" texts) show from this zoom on. */
+  placesFromZoom: 16.5,
+  /** Landmarks that the basemap already names at that zoom: no second label. */
+  unlabelled: ['SNU Lake', 'Biodiversity Park'],
 };
 
 /**
@@ -161,10 +167,37 @@ export const GEOFENCE = {
   /** Still "on campus" up to this far outside the fence (GPS error, gates, roadside stops). */
   marginM: 100,
   /** Accept a recent cached fix: no need to wake the GPS each time. */
-  maxAgeMs: 120_000,
+  maxAgeMs: 30_000,
   timeoutMs: 15_000,
-  /** Check again while the app stays open on screen. */
-  recheckMs: 5 * 60_000,
+  /**
+   * Check again while the app stays open on screen and in use (the idle pause
+   * stops it). One low-power fix: it also moves the "you are here" dot.
+   */
+  recheckMs: 60_000,
+  /** Outside campus there is no map to keep up to date: check less often. */
+  outsideRecheckMs: 5 * 60_000,
+  /**
+   * A re-check that finds no position (a timeout indoors) proves nothing: a
+   * student who was on campus less than this long ago keeps the map.
+   */
+  graceMs: 10 * 60_000,
+};
+
+/**
+ * The student's own position on the map. It comes from the geofence fix, is
+ * used on the phone only and is never sent anywhere.
+ */
+export const ME = {
+  /** Draw the dot only when the error radius is at most this (metres). */
+  showWithinM: 200,
+  /** Draw the error circle around the dot when the radius is above this. */
+  circleAboveM: 30,
+  /** Show the distance to each caddy only when the error radius is at most this. */
+  distanceWithinM: 75,
+  /** An older fix is "last known": the dot dims and the distances hide. */
+  staleMs: 3 * 60_000,
+  /** The location button reuses a fix that is this new. */
+  freshMs: 15_000,
 };
 
 /** "Near <landmark>" is shown only within this distance. */

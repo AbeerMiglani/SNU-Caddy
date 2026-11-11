@@ -95,8 +95,21 @@
         <h1 class="sr-only">SNU Caddy admin</h1>
         <section class="section" aria-labelledby="h-fleet">
           <h2 class="section__title" id="h-fleet">Caddies</h2>
-          <ul class="fleet" id="fleet-list"></ul>
-          <p class="hint" id="fleet-empty">No caddies yet. Add the first one.</p>
+          <div class="table-wrap">
+            <table class="table table--fleet">
+              <thead>
+                <tr>
+                  <th scope="col">Caddy</th>
+                  <th scope="col">Now</th>
+                  <th scope="col">Phone</th>
+                  <th scope="col"><span class="sr-only">Action</span></th>
+                </tr>
+              </thead>
+              <tbody id="fleet-body"></tbody>
+            </table>
+          </div>
+          <p class="hint table-empty" id="fleet-empty">No caddies yet. Add the first one.</p>
+          <p class="hint" id="fleet-status" role="status"></p>
           <form class="row-form" id="fleet-form">
             <label class="field field--num">
               <span>Number</span>

@@ -1,4 +1,5 @@
-// Admin dashboard: caddies (fleet), one-time setup QR codes, linked phones.
+// Admin dashboard: caddies (fleet) with their live state, one-time setup QR
+// codes, linked phones.
 // Every action here is also checked by database.rules.json: a page that
 // is not signed in as an admin can read or change nothing.
 /* global qrcode */
@@ -10,17 +11,26 @@ import {
   signInErrorText,
   signInWithSnu,
 } from './auth.js';
+import { STATE_TEXT, caddyState } from './caddy-state.js';
 import { formatCode, newSetupCode } from './enroll.js';
 import { FIREBASE_ON, loadFirebase, readOnce } from './firebase.js';
+import { timeAgo } from './lib/format.js';
+import { toRecord } from './live.js';
 
 const CODE_LIFE_MS = 10 * 60_000;
 const CLEAN_AFTER_MS = 24 * 60 * 60_000;
 const SLOW_WRITE_MS = 10_000;
+/** The "Now" column counts up ("5 s ago") and changes state with time alone. */
+const STATUS_REFRESH_MS = 5_000;
 const $ = (id) => document.getElementById(id);
 const VIEWS = ['loading', 'config', 'offline', 'signin', 'denied', 'admin'];
 
 function show(view) {
   for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
+}
+
+function setText(node, text) {
+  if (node.textContent !== text) node.textContent = text;
 }
 
 function el(tag, text = null, className = '') {
@@ -120,6 +130,11 @@ function startAdmin(fb, user) {
   const { D, db } = fb;
   let fleet = {};
   let drivers = {};
+  /** caddies/{id}: the live state that students see. */
+  let live = {};
+  let offset = 0; // server time - this computer's time
+  /** id -> the cells of that caddy's row. Rows are patched, so focus stays on a button. */
+  const fleetRows = new Map();
   let connected = false;
   let stopCode = null;
   let creating = false;
@@ -136,7 +151,20 @@ function startAdmin(fb, user) {
   const offDrivers = D.onValue(D.ref(db, 'drivers'), (snap) => {
     drivers = snap.val() ?? {};
     renderDrivers();
+    renderStatus();
   });
+  const offLive = D.onValue(D.ref(db, 'caddies'), (snap) => {
+    live = snap.val() ?? {};
+    renderStatus();
+  });
+  const offOffset = D.onValue(D.ref(db, '.info/serverTimeOffset'), (snap) => {
+    offset = snap.val() ?? 0;
+    renderStatus();
+  });
+  const statusTimer = setInterval(() => {
+    if (!document.hidden) renderStatus();
+  }, STATUS_REFRESH_MS);
+  document.addEventListener('visibilitychange', renderStatus);
   cleanOldCodes(fb).catch(() => {});
 
   const caddyName = (id) => fleet[id]?.name ?? id;
@@ -144,18 +172,25 @@ function startAdmin(fb, user) {
   // --- Fleet ------------------------------------------------------------------
   function renderFleet() {
     const ids = Object.keys(fleet).sort();
-    const list = $('fleet-list');
-    list.replaceChildren(
-      ...ids.map((id) => {
-        const li = el('li');
-        li.append(
-          el('span', caddyName(id), 'fleet__name'),
-          el('span', `No. ${id.slice(-2)}`, 'fleet__id'),
-        );
-        return li;
-      }),
-    );
+    for (const [id, row] of fleetRows) {
+      if (id in fleet) continue;
+      row.tr.remove();
+      fleetRows.delete(id);
+    }
+    const body = $('fleet-body');
+    ids.forEach((id, i) => {
+      let row = fleetRows.get(id);
+      if (!row) {
+        row = createFleetRow(id);
+        fleetRows.set(id, row);
+      }
+      row.name.textContent = caddyName(id);
+      // Every row has a "Remove": the name says which caddy.
+      row.remove.setAttribute('aria-label', `Remove ${caddyName(id)}`);
+      if (body.children[i] !== row.tr) body.insertBefore(row.tr, body.children[i] ?? null);
+    });
     $('fleet-empty').hidden = ids.length > 0;
+    renderStatus();
 
     const select = $('code-caddy');
     const keep = select.value;
@@ -169,9 +204,87 @@ function startAdmin(fb, user) {
     if (ids.includes(keep)) select.value = keep;
   }
 
+  function createFleetRow(id) {
+    const tr = el('tr');
+    const first = el('td');
+    const name = el('span');
+    first.append(name, el('span', `No. ${id.slice(-2)}`, 'note'));
+    const now = el('td');
+    const state = el('span', null, 'status');
+    const age = el('span', null, 'note');
+    now.append(state, age);
+    const phone = el('td');
+    const remove = el('button', 'Remove', 'btn btn--secondary btn--small btn--danger');
+    remove.type = 'button';
+    remove.addEventListener('click', () => removeCaddy(id));
+    const action = el('td');
+    action.append(remove);
+    tr.append(first, now, phone, action);
+    return { tr, name, state, age, phone, remove };
+  }
+
+  /** The "Now" and "Phone" columns: what students see of each caddy, and who can send it. */
+  function renderStatus() {
+    const now = Date.now();
+    for (const [id, row] of fleetRows) {
+      const rec = toRecord(id, live[id], fleet[id]?.name, offset);
+      if (rec) {
+        const state = caddyState(rec, now);
+        const when = timeAgo(rec.ts, now);
+        row.state.dataset.state = state;
+        setText(row.state, STATE_TEXT[state]);
+        setText(
+          row.age,
+          { offline: `last seen ${when}`, lost: `last update ${when}` }[state] ?? when,
+        );
+      } else {
+        // Its driver never tapped GO.
+        delete row.state.dataset.state;
+        setText(row.state, 'No position yet');
+        setText(row.age, '');
+      }
+      const phones = Object.values(drivers).filter((d) => d.caddyId === id).length;
+      setText(row.phone, phones === 0 ? 'No phone' : phones === 1 ? 'Linked' : `${phones} phones`);
+      row.phone.classList.toggle('muted', phones === 0);
+    }
+  }
+
+  /**
+   * Remove a caddy with everything that belongs to it, in ONE update: its
+   * name, its live state (students would see a ghost caddy) and the links of
+   * its driver phones (they could no longer send anyway).
+   */
+  async function removeCaddy(id) {
+    const name = caddyName(id);
+    $('fleet-error').textContent = '';
+    // Offline, the row would vanish although the server never heard of it.
+    if (!connected) {
+      $('fleet-error').textContent =
+        `No connection. ${name} was not removed. Try again when the page is online.`;
+      return;
+    }
+    const phones = Object.entries(drivers).filter(([, d]) => d.caddyId === id);
+    const also = phones.length ? ' Its driver phone is unlinked too.' : '';
+    if (!window.confirm(`Remove ${name}? Students no longer see it.${also}`)) return;
+    const updates = { [`fleet/${id}`]: null, [`caddies/${id}`]: null };
+    for (const [uid] of phones) updates[`drivers/${uid}`] = null;
+    $('fleet-status').textContent = `Removing ${name}…`;
+    try {
+      await confirmed(D.update(D.ref(db), updates), () => {
+        $('fleet-status').textContent =
+          'Still waiting for the connection. Keep this page open until it says “Removed”.';
+      });
+      $('fleet-status').textContent = `Removed ${name}.`;
+    } catch {
+      $('fleet-status').textContent = '';
+      $('fleet-error').textContent = `Could not remove ${name}. Try again.`;
+    }
+  }
+
   $('fleet-form').onsubmit = async (e) => {
     e.preventDefault();
     $('fleet-error').textContent = '';
+    $('fleet-status').textContent = '';
     const num = Number($('fleet-num').value);
     const name = $('fleet-name').value.trim();
     if (!(num >= 1 && num <= 99) || !name) return;
@@ -372,6 +485,10 @@ function startAdmin(fb, user) {
     offConnected();
     offFleet();
     offDrivers();
+    offLive();
+    offOffset();
+    clearInterval(statusTimer);
+    document.removeEventListener('visibilitychange', renderStatus);
     window.removeEventListener('pagehide', onPageHide);
     stopCode?.();
   };
