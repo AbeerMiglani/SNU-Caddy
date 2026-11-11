@@ -46,7 +46,7 @@ flowchart LR
 | Service worker | `sw.js` | Opens the app shell in dead zones; never caches live data |
 | Admin dashboard | `admin.html`, `js/admin.js` | SNU accounts on the admin list |
 | Security rules | `database.rules.json` | Enforced by Firebase on every read and write |
-| Tests | `tests/*.test.mjs`, `tests/e2e/` | 36 rules tests in the emulator + 75 unit tests (`npm test`); 5 browser tests under the real CSP (`npm run test:e2e`); both run in CI on every PR |
+| Tests | `tests/*.test.mjs`, `tests/e2e/` | 37 rules tests in the emulator + 83 unit tests (`npm test`); 6 browser tests under the real CSP (`npm run test:e2e`); both run in CI on every PR |
 
 ## 2. Roles and sign-in
 
@@ -183,6 +183,9 @@ flag and the charger's place (both saved with the shift).
    lost". The icon glides to the new point and turns to the direction of
    travel. Every 5 s the app checks the time-based states (Moving → Parked,
    → Signal lost).
+   The student's own position is not part of this flow. It comes from the
+   campus check on the phone (`js/geofence.js`), draws the "you are here"
+   dot and gives the distance to each caddy, and is never sent anywhere.
 4. **Connections and battery**: student phones listen only while the app is
    on screen, the student is signed in, the phone is on campus, demo mode is
    off, and the student touched the app in the last **5 minutes**. In all
@@ -220,7 +223,7 @@ a still picture cannot burn in.
 
 | Path | Read | Write |
 | ---- | ---- | ----- |
-| `caddies` | Verified `@snu.edu.in` accounts | Only the phone bound to **that** caddy (validated fields). Admins may force it offline. |
+| `caddies` | Verified `@snu.edu.in` accounts | Only the phone bound to **that** caddy (validated fields). Admins may force it offline, or delete it with its caddy. |
 | `fleet` | Verified `@snu.edu.in` accounts; a bound phone reads its own caddy | Admins |
 | `drivers/{uid}` | That phone; admins | The phone itself, **only** together with a valid code claim. Admins may delete (unlink). |
 | `enrollCodes/{code}` | Anyone signed in **who knows the exact code**; admins may list | Admins create/delete. A phone may only claim an unused, unexpired code once. |
@@ -234,13 +237,14 @@ only together with a new `lastUpdated`), no extra fields (a `status` field
 is refused), and the caddy must exist in `fleet`. GPS fields change only
 with a new `lastUpdated`, at most once per second.
 
-The rules are tested with the Firebase Emulator: 36 tests, one per attack
+The rules are tested with the Firebase Emulator: 37 tests, one per attack
 or allowed action, including the exact writes a driver phone makes in a
 shift (`npm test`). The shift engine has 52 more tests with a fake GPS, a
 fake database and fake timers; the map states have 4 tests, the demo 7,
-and other tests keep the service worker list, the CSP hashes, the preload
-lists and the pinned CDN versions in sync (`npm run test:unit`, no emulator
-needed). Five browser tests open the three pages in Chromium, served by
+the campus check and the short texts 7, and other tests keep the service
+worker list, the CSP hashes, the preload lists and the pinned versions in
+sync (`npm run test:unit`, no emulator needed). Six browser tests open the
+three pages in Chromium, served by
 the Hosting emulator with the real headers, so a CSP that blocks something
 fails CI (`npm run test:e2e`).
 
@@ -290,7 +294,7 @@ touches live data, sign-in, Firebase's `/__/` pages or map tiles.
 | A bound phone sends junk or floods writes | Field validation, campus box, accuracy limit, server timestamps, and at most 1 position write per second (GPS fields and `movedAt` cannot change without a new timestamp; tested). An abusive phone is unlinked. |
 | A setup QR is replaced or left on screen | When the admin creates a new code, signs out or closes the page, the unused code is deleted at once. Unused codes also expire after 10 minutes. |
 | Driver location outside work | The phone shares only between GO and Go offline, and stops at the campus fence + 100 m. The rules also reject positions outside the campus box. |
-| Student location privacy | The geofence check runs **on the phone**. The location is never sent or stored. |
+| Student location privacy | The geofence check runs **on the phone**. The same fix draws the student's own dot on the map and gives the distance to each caddy. The location is never sent or stored: it lives in the page's memory only, and the app has no code path that writes it. |
 | Ghost caddies (dead battery, closed app, dead zone) | `onDisconnect()` sets `online: false` on the server (tested). Students also dim any caddy whose `lastUpdated` is older than **90 s** and label it "Signal lost". |
 | Script injection (XSS) | All text goes into the page with `textContent`. A strict Content-Security-Policy allows only this site's scripts, hashed inline scripts and the pinned CDNs (see section 5). Leaflet, jsQR and qrcode-generator are pinned and use Subresource Integrity. The Firebase SDK is pinned to 12.19.0 on Google's gstatic CDN; it loads as ES modules, which cannot carry SRI. Pages cannot be framed (`frame-ancestors 'none'`). |
 | A bad CDN file or a cached old version | The service worker caches only version-pinned CDN URLs, and same-origin files with network first; it never caches live data or sign-in. |
@@ -329,6 +333,10 @@ but it needs a billing account. That is a decision for SNU IT.
 | Student opens the app in a dead zone | The service worker serves the app; the list says "Connecting…" until the database answers. |
 | Network blocks WebSockets | The Firebase SDK falls back to long polling (allowed by the CSP). |
 | Student is off campus | "You are outside campus. Caddies show here when you are on campus." No data is loaded. |
+| Student walks off campus with the app open | The campus check runs again every minute. A cheap fix that says "outside" is confirmed with one GPS fix before the map is taken away. |
+| A re-check finds no position (indoors, a timeout) | The student keeps the map for up to 10 minutes after the last fix on campus. The "you are here" dot turns grey after 3 minutes and the distances hide. |
+| The phone's own position is rough (Wi-Fi or cell only) | Up to 200 m: a dot with an error circle. Distances show only up to 75 m. Above 200 m: no dot. "Show my location" takes one precise fix. |
+| An admin removes a caddy that is on shift | One update deletes the caddy's name, its live state and its phone link. The phone sees the deleted link within a second, stops, and returns to the student app. |
 | Student denies location | The sheet explains why location is needed and that it stays on the phone. No data is loaded. |
 | Site opened over plain `http://` | Location needs HTTPS; the app says so. |
 | Non-SNU Google account | The account is removed again, and the app asks for an `@snu.edu.in` account. |
@@ -352,6 +360,7 @@ but it needs a billing account. That is a decision for SNU IT.
 | 2 | Firebase project, `@snu.edu.in` login, geofence, QR device binding, admin dashboard, security rules + tests | Done |
 | 3 | Driver screen: GO → Online (or Charging) → Go offline, GPS gate, Screen Wake Lock, `onDisconnect`, dead-zone recovery | Done |
 | 4 | Live caddies on the student map (Moving / Parked / Charging / Signal lost / Offline), connection management with idle pause, service worker (offline app shell), strict CSP | Done |
+| 5 | Version 1.0: the student's own position and distances, place names on the map, About and privacy, live fleet state and "Remove" for admins, 404 page, launch checklist | Done |
 
 ## 10. Design
 
@@ -360,7 +369,7 @@ looks like the work of one team. The rules (`css/app.css` holds the tokens):
 
 | Part | Rule |
 | ---- | ---- |
-| Colour | Black and white first, one grey scale. Colour only where it means something: the state dots (Moving green, Parked blue, Charging purple, Signal lost amber, Offline grey), errors (red) and the driver GO (blue). |
+| Colour | Black and white first, one grey scale. Colour only where it means something: the state dots (Moving green, Parked blue, Charging purple, Signal lost amber, Offline grey), the student's own dot on the map (blue with a ring), errors (red) and the driver GO (blue). |
 | Type | Inter, set tight. Sizes 32 / 24 / 18 / 16 / 14 / 12 px; weights 400, 500 and 700 only. Sentence case everywhere; no uppercase labels. |
 | Shape | 8 px corners on buttons, inputs and map buttons; 12 px only on the top of the bottom sheet. No pills and no cards: sections are separated by space and hairlines. |
 | Depth | One crisp shadow, only for things that float over the map. |
