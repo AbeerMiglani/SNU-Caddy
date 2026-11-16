@@ -4,6 +4,9 @@
 // comes back to the screen), and a slow re-check while it stays open. No
 // continuous GPS on student phones.
 //
+// The same fix also places the student on the map ("you are here") and gives
+// the distance to each caddy, so that costs no extra location request.
+//
 // Privacy: the location is used only on the phone. It is never sent anywhere.
 //
 // Note for the IT team: this is a usage policy, not a security boundary. The
@@ -15,7 +18,9 @@ import { distanceOutsideM } from './lib/polygon.js';
 
 /**
  * @typedef {'inside'|'outside'|'denied'|'unavailable'|'unsupported'|'insecure'} FenceKind
- * @typedef {{ kind: FenceKind, uncertain?: boolean, distanceM?: number, accuracyM?: number }} FenceResult
+ * @typedef {{ lat: number, lng: number, accuracy: number, at: number }} Position
+ *   `accuracy` is the error radius in metres; `at` is when the fix arrived (ms).
+ * @typedef {{ kind: FenceKind, uncertain?: boolean, distanceM?: number, position?: Position }} FenceResult
  */
 
 /** Decide from one position fix. 'uncertain' = the error circle reaches campus. */
@@ -67,11 +72,12 @@ export async function checkCampus({ highAccuracy = false, fresh = false } = {}) 
       timeout: GEOFENCE.timeoutMs,
     });
     const { latitude, longitude, accuracy } = pos.coords;
+    const position = { lat: latitude, lng: longitude, accuracy, at: Date.now() };
     const result = classify(latitude, longitude, accuracy);
-    if (result.kind !== 'uncertain') return { ...result, accuracyM: accuracy };
+    if (result.kind !== 'uncertain') return { ...result, position };
     // Wi-Fi/cell location was too rough to decide: ask GPS once.
     if (!highAccuracy) return checkCampus({ highAccuracy: true });
-    return { kind: 'outside', uncertain: true, distanceM: result.distanceM, accuracyM: accuracy };
+    return { kind: 'outside', uncertain: true, distanceM: result.distanceM, position };
   } catch (err) {
     // 1 = PERMISSION_DENIED, 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT
     return { kind: err?.code === 1 ? 'denied' : 'unavailable' };

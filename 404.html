@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Page not found · SNU Caddy</title>
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/assets/icon.svg" type="image/svg+xml" />
+    <!-- Firebase Hosting sends this page for every address that does not exist.
+         It stands alone (absolute links, its own few styles): the address can
+         be at any depth. -->
+    <style>
+      @font-face {
+        font-family: 'Inter Variable';
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: swap;
+        src: url('/assets/fonts/inter-latin-wght-normal.woff2') format('woff2');
+      }
+
+      :root {
+        --bg: #ffffff;
+        --fg: #000000;
+        --text-2: #545454;
+        color-scheme: light dark;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #000000;
+          --fg: #ffffff;
+          --text-2: #afafaf;
+        }
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 12px;
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 24px;
+        box-sizing: border-box;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 22px;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .wordmark {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+
+      h1 {
+        margin: 12px 0 0;
+        font-size: 32px;
+        font-weight: 700;
+        line-height: 36px;
+        letter-spacing: -0.02em;
+      }
+
+      p {
+        margin: 0;
+        color: var(--text-2);
+      }
+
+      a {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 48px;
+        margin-top: 12px;
+        border-radius: 8px;
+        background: var(--fg);
+        color: var(--bg);
+        font-weight: 500;
+        text-decoration: none;
+      }
+
+      a:focus-visible {
+        outline: 3px solid #276ef1;
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <span class="wordmark">SNU Caddy</span>
+    <h1>Page not found</h1>
+    <p>This address is not part of SNU Caddy.</p>
+    <a href="/">Open SNU Caddy</a>
+  </body>
+</html>

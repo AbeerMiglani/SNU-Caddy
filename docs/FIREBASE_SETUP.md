@@ -33,8 +33,8 @@ You do **not** need a credit card. Stay on the **Spark** plan.
      email. Save.
    - **Anonymous** → Enable. Save. (Used only by linked driver phones.)
 3. **Settings → Authorized domains**: `localhost`, `<project-id>.firebaseapp.com`
-   and `<project-id>.web.app` are already there. Add a custom domain only if
-   you use one later.
+   and `<project-id>.web.app` are already there. A custom domain needs more
+   steps (see "A custom domain" at the end of step 6).
 4. If the console offers **"Upgrade to Firebase Authentication with Identity
    Platform"**, do **not** accept it. On the free plan, that upgrade adds a
    limit of 3,000 daily active users.
@@ -96,6 +96,19 @@ Use the `firebaseapp.com` address. It is the same as `authDomain`, so Google
 sign-in also works in browsers that block third-party storage (Safari,
 Firefox, Brave, Vanadium on GrapheneOS).
 
+### A custom domain
+
+The SNU project uses `snu-caddy.abeermiglani.com`. To use your own, set
+`CUSTOM_DOMAIN` in `js/firebase-config.js` and put the same address in the
+`frame-src` of the Content-Security-Policy in `firebase.json` (`npm test`
+checks it). On that address, Google sign-in runs on the address itself, so
+it also works in browsers that block third-party storage. It then needs, in
+this order: the domain in Hosting (DNS records, no proxy), the domain in
+Authentication → Authorized domains, and
+`https://<your domain>/__/auth/handler` in the Google Cloud OAuth client's
+authorized redirect URIs. `docs/LAUNCH_CHECKLIST.md` (section 0) has the
+clicks. Set `CUSTOM_DOMAIN` to `''` for no custom domain.
+
 No command line? You can paste `database.rules.json` into **Realtime Database
 → Rules** in the console and click **Publish**. (Hosting still needs the CLI.)
 
@@ -114,6 +127,10 @@ No command line? You can paste `database.rules.json` into **Realtime Database
 Add other admins the same way. To remove an admin, delete their entry.
 
 ## Step 8: Add the caddies
+
+The **Caddies** table shows what students see of each caddy now, and
+whether a phone is linked. **Remove** deletes a caddy with its live state
+and its phone link.
 
 On the admin page, under **Caddies**, add each caddy: number `1`, name
 `Caddy 01`; number `2`, name `Caddy 02`; and so on.

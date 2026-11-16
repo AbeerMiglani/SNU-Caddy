@@ -60,11 +60,18 @@ test('the policy is strict', () => {
   }
 });
 
-test('Google sign-in can open its frame from the project auth domain', async () => {
-  const { FIREBASE_CONFIG } = await import('../js/firebase-config.js');
-  if (!FIREBASE_CONFIG) return; // no project yet
-  assert.ok(
-    directive('frame-src').includes(`https://${FIREBASE_CONFIG.authDomain}`),
-    `frame-src needs https://${FIREBASE_CONFIG.authDomain}`,
+test('Google sign-in can open its frame from the auth domain of every address', async () => {
+  const { CUSTOM_DOMAIN, FIREBASE_CONFIG, authDomainFor } = await import(
+    '../js/firebase-config.js'
   );
+  if (!FIREBASE_CONFIG) return; // no project yet
+  const project = FIREBASE_CONFIG.projectId;
+  const hosts = [`${project}.web.app`, `${project}.firebaseapp.com`, CUSTOM_DOMAIN].filter(Boolean);
+  // On the custom address, sign-in runs there (same site); elsewhere on firebaseapp.com.
+  if (CUSTOM_DOMAIN) assert.equal(authDomainFor(CUSTOM_DOMAIN), CUSTOM_DOMAIN);
+  assert.equal(authDomainFor(`${project}.web.app`), `${project}.firebaseapp.com`);
+  assert.equal(authDomainFor('localhost'), `${project}.firebaseapp.com`);
+  for (const host of new Set(hosts.map(authDomainFor))) {
+    assert.ok(directive('frame-src').includes(`https://${host}`), `frame-src needs https://${host}`);
+  }
 });

@@ -213,33 +213,30 @@ code {
   margin-top: 0;
 }
 
-/* --- Caddies: flat rows --------------------------------------------------------- */
-.fleet {
-  margin: 0 0 20px;
-  padding: 0;
-  border-top: 1px solid var(--line);
-  list-style: none;
+/* --- Caddies: name, what students see now, phone ------------------------------- */
+/* The state: the same dot and word as in the student list. */
+.status {
+  white-space: nowrap;
 }
 
-.fleet:empty {
-  display: none;
+.status[data-state]::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--dot);
 }
 
-.fleet li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 52px;
-  border-bottom: 1px solid var(--line);
-  font-size: 16px;
-  font-weight: 500;
+/* The "Add caddy" form under the table. */
+.table-wrap ~ .row-form {
+  margin-top: 20px;
 }
 
-.fleet__id {
-  color: var(--text-2);
-  font-size: 14px;
-  font-weight: 400;
+/* "Removed Caddy 03." between the table and the form. */
+#fleet-status:not(:empty) {
+  margin: 16px 0 0;
 }
 
 /* --- Setup QR: black on white for every scanner --------------------------------- */
@@ -350,6 +347,24 @@ code {
   min-width: 96px;
 }
 
+/* A note after a value ("Caddy 01 · No. 01", "Moving · 5 s ago"): grey, kept
+   whole, with a dot before it. On a phone it goes under the value (below). */
+.note {
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.note:not(:empty)::before {
+  content: ' · ';
+  white-space: pre;
+}
+
+.table--fleet td:nth-child(3) {
+  white-space: nowrap;
+}
+
 .muted {
   color: var(--text-2);
 }
@@ -363,6 +378,20 @@ code {
 @media (max-width: 480px) {
   .who__email {
     display: none;
+  }
+
+  .note {
+    display: block;
+    white-space: normal;
+  }
+
+  /* Room for a short name ("Caddy 02") on one line. */
+  .table--fleet td:first-child {
+    min-width: 84px;
+  }
+
+  .note:not(:empty)::before {
+    content: none;
   }
 
   /* Both forms the same way on phones: the button under the fields. */

@@ -50,7 +50,10 @@ jobs:
   # The three pages in Chromium, served by the Hosting emulator with the real
   # firebase.json headers (CSP), against the Auth and Database emulators.
   e2e:
-    runs-on: ubuntu-latest
+    # A fixed image, not ubuntu-latest: the Playwright version in the lockfile
+    # installs Chromium only on the Ubuntu versions it knows (it refused
+    # 26.04). Move this on together with a Playwright upgrade.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5

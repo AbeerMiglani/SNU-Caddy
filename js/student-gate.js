@@ -27,7 +27,7 @@ const CARDS = {
   },
   ask: {
     title: 'Caddies show only on campus',
-    text: 'SNU Caddy uses your location only to check that you are on campus. It stays on this phone.',
+    text: 'SNU Caddy uses your location to check that you are on campus and to show you on the map. It stays on this phone.',
     action: 'Allow location',
   },
   outside: {
@@ -87,16 +87,20 @@ function recall(key) {
  * }} els
  * @param {{
  *   onLive: (on: boolean, ctx: { fb: any, user: any }) => void,
+ *   onPosition?: (position: import('./geofence.js').Position | null) => void,
  *   onChange?: () => void,
  * }} hooks
+ *   `onPosition`: the student's own position from each campus check that found
+ *   them on campus; null when it is no longer known (signed out, outside).
  */
-export function createStudentGate(els, { onLive, onChange }) {
+export function createStudentGate(els, { onLive, onPosition, onChange }) {
   let fb = null;
   let authKnown = false;
   let user = null;
   /** @type {{ kind: string, uncertain?: boolean } | null} */
   let fence = null;
   let fenceAt = 0;
+  let insideAt = 0; // the last time a fix was on campus
   let demo = false;
   let paused = false;
   let live = false;
@@ -179,6 +183,14 @@ export function createStudentGate(els, { onLive, onChange }) {
   }
 
   // --- Geofence ---------------------------------------------------------------
+  /** @param {import('./geofence.js').FenceResult} result */
+  function setFence(result) {
+    fence = result;
+    fenceAt = Date.now();
+    if (result.kind === 'inside') insideAt = fenceAt;
+    onPosition?.(result.kind === 'inside' ? (result.position ?? null) : null);
+  }
+
   async function checkFence({ userAction = false } = {}) {
     if (checking || !signedIn()) return;
     clearTimeout(recheckTimer);
@@ -190,27 +202,72 @@ export function createStudentGate(els, { onLive, onChange }) {
       return;
     }
     checking = true;
-    if (!fence || fence.kind !== 'inside') fence = { kind: 'checking' };
+    // "Checking…" for the first check and for a tap. A re-check by the timer
+    // keeps the card (or the map) that is on screen.
+    if (!fence || (userAction && fence.kind !== 'inside')) fence = { kind: 'checking' };
     render();
+    const wasInside = fence?.kind === 'inside';
     let result;
     try {
       result = await checkCampus({ fresh: userAction });
+      // The timer's fix is a cheap one (Wi-Fi or cell towers) and can be far
+      // off. Before it takes the map away from a student who was on campus,
+      // the GPS confirms it.
+      if (!userAction && wasInside && result.kind === 'outside') {
+        result = await checkCampus({ highAccuracy: true });
+      }
     } finally {
       checking = false;
     }
+    if (!signedIn()) return; // signed out while the phone looked for its position
     if (result.kind === 'inside' || result.kind === 'outside') remember(ASKED_KEY);
-    fence = result;
-    fenceAt = Date.now();
+    // A re-check by the timer that found no position proves nothing (a timeout
+    // indoors): a student who was on campus a moment ago keeps the map.
+    const keepInside =
+      !userAction &&
+      result.kind === 'unavailable' &&
+      wasInside &&
+      Date.now() - insideAt < GEOFENCE.graceMs;
+    if (keepInside) fenceAt = Date.now();
+    else setFence(result);
     render();
     scheduleRecheck();
+  }
+
+  /**
+   * A new, precise position for the map's location button. It is a campus
+   * check too: a student who walked out gets the "outside" card.
+   * @returns {Promise<import('./geofence.js').Position | null>} null: none found
+   */
+  async function locate() {
+    if (checking || !signedIn()) return null;
+    clearTimeout(recheckTimer);
+    checking = true;
+    let result;
+    try {
+      result = await checkCampus({ highAccuracy: true });
+    } finally {
+      checking = false;
+    }
+    if (!signedIn()) return null;
+    // No position this time: the student keeps the map and the last dot.
+    const failed = result.kind === 'unavailable' && fence?.kind === 'inside';
+    if (!failed) {
+      setFence(result);
+      render();
+    }
+    scheduleRecheck();
+    return !failed && result.kind === 'inside' ? (result.position ?? null) : null;
   }
 
   function scheduleRecheck() {
     clearTimeout(recheckTimer);
     // Idle pause: no GPS checks for a phone that nobody looks at.
     if (document.hidden || !signedIn() || demo || paused) return;
-    if (fence?.kind === 'inside' || fence?.kind === 'outside') {
+    if (fence?.kind === 'inside') {
       recheckTimer = setTimeout(() => checkFence(), GEOFENCE.recheckMs);
+    } else if (fence?.kind === 'outside') {
+      recheckTimer = setTimeout(() => checkFence(), GEOFENCE.outsideRecheckMs);
     }
   }
 
@@ -285,6 +342,8 @@ export function createStudentGate(els, { onLive, onChange }) {
       user = u && !u.isAnonymous ? u : null;
       fence = null;
       fenceAt = 0;
+      insideAt = 0;
+      onPosition?.(null);
       clearTimeout(recheckTimer);
       render();
       if (signedIn() && !demo) checkFence();
@@ -312,6 +371,7 @@ export function createStudentGate(els, { onLive, onChange }) {
       else scheduleRecheck();
       updateLive();
     },
+    locate,
     get live() {
       return live;
     },

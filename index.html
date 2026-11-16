@@ -7,6 +7,7 @@
     <meta name="description" content="Live caddy tracker for the Shiv Nadar University campus." />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#ffffff" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="SNU Caddy" />
@@ -29,7 +30,7 @@
         var modules =
           'main caddy-layer caddy-list caddy-state config demo firebase firebase-config live ' +
           'map sheet student-gate auth geofence theme data/campus data/demo-routes lib/geo ' +
-          'lib/ping-gate lib/polygon lib/five-taps';
+          'lib/ping-gate lib/polygon lib/five-taps lib/format';
         modules.split(' ').forEach(function (m) {
           var link = document.createElement('link');
           link.rel = 'modulepreload';
@@ -77,29 +78,59 @@
       <div class="topbar__brand">
         <span class="wordmark" id="brand">SNU Caddy</span>
       </div>
-      <!-- Each tap cycles Auto -> Light (Positron) -> Dark (Dark Matter). -->
-      <button class="icon-btn" id="theme-btn" type="button">
-        <svg class="icon icon--auto" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" />
-          <path class="fill" d="M12 4a8 8 0 0 0 0 16z" />
-        </svg>
-        <svg class="icon icon--light" viewBox="0 0 24 24" aria-hidden="true">
-          <circle class="fill" cx="12" cy="12" r="4.5" />
-          <path
-            d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"
-          />
-        </svg>
-        <svg class="icon icon--dark" viewBox="0 0 24 24" aria-hidden="true">
-          <path class="fill" d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />
-        </svg>
-        <span class="sr-only">Theme: </span>
-        <span class="icon-btn__label" id="theme-label">Auto</span>
-      </button>
+      <div class="topbar__actions">
+        <button
+          class="icon-btn"
+          id="about-btn"
+          type="button"
+          aria-label="About SNU Caddy"
+          aria-haspopup="dialog"
+        >
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v6" />
+            <rect class="fill" x="11" y="6.5" width="2" height="2" />
+          </svg>
+        </button>
+        <!-- Each tap cycles Auto -> Light (Positron) -> Dark (Dark Matter). -->
+        <button class="icon-btn" id="theme-btn" type="button">
+          <svg class="icon icon--auto" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" />
+            <path class="fill" d="M12 4a8 8 0 0 0 0 16z" />
+          </svg>
+          <svg class="icon icon--light" viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="fill" cx="12" cy="12" r="4.5" />
+            <path
+              d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"
+            />
+          </svg>
+          <svg class="icon icon--dark" viewBox="0 0 24 24" aria-hidden="true">
+            <path class="fill" d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />
+          </svg>
+          <span class="sr-only">Theme: </span>
+          <span class="icon-btn__label" id="theme-label">Auto</span>
+        </button>
+      </div>
     </header>
 
     <div id="map" role="region" aria-label="Campus map"></div>
 
-    <!-- Map button: frame the whole campus. It floats above the sheet. -->
+    <!-- Map buttons: they float above the sheet. "Show my location" is there
+         only while the phone's own position is known (signed in, on campus). -->
+    <button
+      class="map-btn map-btn--locate"
+      id="locate-btn"
+      type="button"
+      aria-label="Show my location"
+      aria-disabled="false"
+      hidden
+    >
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="6.5" />
+        <path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22" />
+        <circle class="fill" cx="12" cy="12" r="2.5" />
+      </svg>
+    </button>
     <button class="map-btn" id="recenter-btn" type="button" aria-label="Show the whole campus">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />
@@ -129,7 +160,16 @@
           <!-- Screen readers hear only the online count and notes, not every Moving/Parked change. -->
           <p class="sr-only" id="summary-status" role="status"></p>
         </div>
-        <button class="switch" id="demo-switch" type="button" role="switch" aria-checked="false">
+        <!-- Sample caddies for a pitch. With sign-in set up, the switch shows only
+             while the demo runs ("Try the demo", or ?demo=1 in the address). -->
+        <button
+          class="switch"
+          id="demo-switch"
+          type="button"
+          role="switch"
+          aria-checked="false"
+          hidden
+        >
           <span class="switch__label">Demo</span>
           <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
         </button>
@@ -145,7 +185,7 @@
         </div>
         <ul class="list" id="caddy-list" hidden></ul>
         <div class="empty" id="empty">
-          <p class="empty__text">A caddy shows here when its driver taps GO.</p>
+          <p class="empty__text">No caddy is on shift now. One shows here when its driver starts.</p>
         </div>
         <p class="account" id="account" hidden>
           <span id="account-email"></span>
@@ -203,6 +243,62 @@
           <button class="btn btn--secondary" id="enroll-cancel" type="button">Cancel</button>
           <button class="btn btn--primary" id="enroll-link" type="submit">Link this phone</button>
         </div>
+      </form>
+    </dialog>
+
+    <!-- About: what the words mean, and what the app does with location. -->
+    <dialog class="enroll about" id="about" aria-labelledby="about-title">
+      <form class="enroll__inner" method="dialog">
+        <h2 class="enroll__title" id="about-title">About SNU Caddy</h2>
+        <p class="about__text">
+          SNU Caddy shows where each campus caddy is now. A driver shares the caddy’s location
+          only while on shift.
+        </p>
+        <h3 class="about__head">What the words mean</h3>
+        <dl class="legend">
+          <div data-state="moving">
+            <dt>Moving</dt>
+            <dd>Driving now.</dd>
+          </div>
+          <div data-state="parked">
+            <dt>Parked</dt>
+            <dd>On shift, and stopped for a minute or more.</dd>
+          </div>
+          <div data-state="charging">
+            <dt>Charging</dt>
+            <dd>Plugged in. Not one to wait for.</dd>
+          </div>
+          <div data-state="lost">
+            <dt>Signal lost</dt>
+            <dd>No update for 90 seconds. The map shows its last place.</dd>
+          </div>
+          <div data-state="offline">
+            <dt>Offline</dt>
+            <dd>The driver is off shift.</dd>
+          </div>
+        </dl>
+        <h3 class="about__head">Your privacy</h3>
+        <ul class="about__list">
+          <li>
+            Your location stays on this phone. The app uses it to check that you are on campus,
+            to show you on the map and to give the distance to each caddy. It is never sent or
+            saved.
+          </li>
+          <li>Sign-in uses your SNU Google account, only to check that you are from SNU.</li>
+          <li>A caddy’s location is kept only as its newest position. There is no history.</li>
+        </ul>
+        <!-- The address comes from js/config.js (SUPPORT_EMAIL). -->
+        <div id="about-help" hidden>
+          <h3 class="about__head">Help</h3>
+          <p class="about__text">
+            Something wrong, or a question? Write to
+            <a class="about__link" id="about-mail"></a>.
+          </p>
+        </div>
+        <p class="about__meta">
+          <span id="about-version"></span> · Map data © OpenStreetMap contributors, © CARTO
+        </p>
+        <button class="btn btn--primary" id="about-close" type="submit">Close</button>
       </form>
     </dialog>
 

@@ -7,6 +7,7 @@ import { cartSvg } from './caddy-layer.js';
 import { STATE_ORDER, STATE_TEXT } from './caddy-state.js';
 import { NEAR_LANDMARK_M } from './config.js';
 import { LANDMARKS } from './data/campus.js';
+import { distanceText, timeAgo } from './lib/format.js';
 import { distanceM } from './lib/geo.js';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -23,16 +24,6 @@ export function placeLabel(p) {
     }
   }
   return best && bestD <= NEAR_LANDMARK_M ? `Near ${best.name}` : 'On campus road';
-}
-
-/** Seconds in steps of 5 (the list refreshes every 5 s, so the number never looks stuck). */
-export function timeAgo(ts, now) {
-  const s = Math.max(0, Math.round((now - ts) / 1000));
-  if (s < 5) return 'just now';
-  if (s < 60) return `${Math.floor(s / 5) * 5} s ago`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
-  return `${Math.round(m / 60)} h ago`;
 }
 
 function setText(el, text) {
@@ -69,25 +60,45 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
     const line = document.createElement('span');
     line.className = 'row__line';
     titleLine.append(name, line);
+    // Place and age: two parts with a dot between them. When the age wraps
+    // to a second line, the dot is hidden (app.css).
     const meta = document.createElement('span');
     meta.className = 'row__meta';
+    const parts = document.createElement('span');
+    parts.className = 'row__parts';
+    const place = document.createElement('span');
+    const age = document.createElement('span');
+    parts.append(place, age);
+    meta.append(parts);
     main.append(titleLine, meta);
 
+    // State, and under it the distance from the student (when it is known).
+    const side = document.createElement('span');
+    side.className = 'row__side';
     const state = document.createElement('span');
     state.className = 'row__state';
+    const far = document.createElement('span');
+    far.className = 'row__dist';
+    const dist = document.createElement('span');
+    const away = document.createElement('span'); // "250 m" reads as "250 m away"
+    away.className = 'sr-only';
+    far.append(dist, away);
+    side.append(state, far);
 
-    btn.append(icon, main, state);
+    btn.append(icon, main, side);
     li.append(btn);
-    return { li, btn, name, line, meta, state };
+    return { li, btn, name, line, place, age, state, dist, away };
   }
 
   /**
    * @param {Map<string, any>} caddies  id -> caddy record (with its `state`)
    * @param {string|null} selectedId
    * @param {string|null} [note]  replaces the summary ("Connecting…", "Paused …")
+   * @param {{ lat: number, lng: number } | null} [origin]  the student's own
+   *   position, for the distance to each caddy; null when it is not known well
    * @returns {boolean} true when the list switched between empty and not empty
    */
-  function render(caddies, selectedId, note = null) {
+  function render(caddies, selectedId, note = null, origin = null) {
     const now = Date.now();
     const wasEmpty = !empty.hidden;
     // Moving a focused row in the DOM drops focus; put it back afterwards.
@@ -112,12 +123,18 @@ export function createCaddyList({ list, empty, summary, summaryStatus, onSelect 
       }
       setText(row.name, c.name);
       setText(row.line, c.line ?? '');
-      // The age first: if the line is cut (large text), the place goes, not the age.
-      // A no-break space keeps "5 s" and "14 min" whole when the line wraps.
-      const when = timeAgo(c.ts, now).replace(/(\d) /, '$1\u00a0');
-      const age = { offline: `Last seen ${when}`, lost: `Last update ${when}` }[c.state];
-      setText(row.meta, `${age ?? `Updated ${when}`} · ${placeLabel(c)}`);
+      // The place first: it is what a student looks for. Then the age of the position.
+      const when = timeAgo(c.ts, now);
+      setText(row.place, placeLabel(c));
+      setText(
+        row.age,
+        { offline: `Last seen ${when}`, lost: `Last update ${when}` }[c.state] ?? when,
+      );
       setText(row.state, STATE_TEXT[c.state] ?? c.state);
+      // A straight line, not a walking route: "250 m" (steps of 10 m).
+      const far = origin ? distanceText(distanceM(origin, c)) : '';
+      setText(row.dist, far);
+      setText(row.away, far && far !== 'Here' ? ' away' : '');
       row.btn.dataset.state = c.state;
       row.btn.classList.toggle('is-selected', c.id === selectedId);
       row.btn.setAttribute('aria-current', String(c.id === selectedId));
