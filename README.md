@@ -11,8 +11,10 @@ It is a mobile web app (PWA): plain HTML, CSS and JavaScript, with no build step
 | 4 | Live caddies on the student map (Moving / Parked / Charging / Signal lost / Offline), idle pause, service worker, strict CSP | Done |
 | 5 | Version 1.0: the student's own position and the distance to each caddy, place names on the map, About and privacy, live fleet state and "Remove" on the admin page, 404 page, launch checklist | Done |
 
-- **Live app:** <https://snu-caddy-45q9r.firebaseapp.com> (same site:
-  <https://snu-caddy-45q9r.web.app>). Admin page: `/admin.html`.
+- **Live app:** <https://snu-caddy.abeermiglani.com> (the same site also
+  answers on <https://snu-caddy-45q9r.firebaseapp.com> and
+  <https://snu-caddy-45q9r.web.app>). Admin page: `/admin.html`. The move
+  from `snu-caddy.abbykayo.com` is section 0 of the launch checklist.
 - **For the SNU IT department:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
   (system design, security rules, threat model, free-tier budget, edge cases).
 - **Set up Firebase (free Spark plan):** [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).

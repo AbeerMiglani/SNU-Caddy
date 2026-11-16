@@ -3,12 +3,54 @@
 The code is ready. This list holds the steps that need a person: the project
 owner, an admin, or someone on campus. Do them in this order.
 
+## 0. Move to snu-caddy.abeermiglani.com (project owner)
+
+The app's address is `snu-caddy.abeermiglani.com` (`CUSTOM_DOMAIN` in
+`js/firebase-config.js`). It replaces `snu-caddy.abbykayo.com`, which is
+removed. Do the steps in this order: until the Google Cloud step is done,
+sign-in fails on the new address.
+
+- [ ] **Firebase Hosting.** Firebase console → Hosting → Add custom domain →
+      `snu-caddy.abeermiglani.com`. Do not tick the redirect option. Keep
+      the page open: it shows the DNS records to add.
+- [ ] **Cloudflare DNS** (zone `abeermiglani.com`). Add exactly the records
+      that Firebase shows, with the proxy **off** (grey cloud, "DNS only").
+      Cloudflare's proxy adds its own script to the pages, which the app's
+      security policy blocks. Wait until Firebase says the domain is
+      connected and the certificate is active (minutes to a few hours).
+- [ ] **Authorized domains.** Firebase console → Authentication →
+      Settings → Authorized domains → Add `snu-caddy.abeermiglani.com`.
+- [ ] **Google Cloud: sign-in handler.** Google Cloud console (project
+      `snu-caddy-45q9r`) → APIs & Services → Credentials → OAuth 2.0
+      Client IDs → "Web client (auto created by Google Service)" →
+      Authorized redirect URIs → add
+      `https://snu-caddy.abeermiglani.com/__/auth/handler` → Save. If the
+      console asks, also add `abeermiglani.com` to the authorized domains of
+      the OAuth consent screen. Changes can take a few minutes.
+- [ ] **Deploy** the release that names the new address (`npm run deploy`).
+- [ ] **Test** on the new address: sign in as a student (in a browser tab
+      and in the installed app), open `/admin.html` and sign in.
+- [ ] **Re-link every driver phone** on the new address. A phone keeps its
+      link per address, so phones linked on the old one are not linked on
+      the new one. Per phone: open `https://snu-caddy.abeermiglani.com`,
+      install it, link it with a new setup code (section 4). Then
+      **Unlink** the phone's old entry on the admin page: under **Linked
+      phones** it is the older row of the same caddy.
+- [ ] **Tell students** the new address. They sign in and allow location
+      once more there, and reinstall the app if they had installed it.
+- [ ] **Remove the old address**, only after the phones work on the new
+      one: Firebase console → Hosting → `snu-caddy.abbykayo.com` → Delete;
+      Cloudflare (zone `abbykayo.com`) → delete the `snu-caddy` records;
+      Authentication → Authorized domains → delete
+      `snu-caddy.abbykayo.com`; and its handler URL in the OAuth client,
+      if it is listed.
+
 ## 1. Accounts and keys (project owner)
 
 - [ ] **Restrict the CARTO map key** to the app's addresses. CARTO dashboard →
       the key in `js/config.js` (`CARTO_KEY`) → allowed domains:
-      `snu-caddy-45q9r.web.app`, `snu-caddy-45q9r.firebaseapp.com`, and a
-      custom domain if you add one. Without this, another site can use up
+      `snu-caddy.abeermiglani.com`, `snu-caddy-45q9r.web.app` and
+      `snu-caddy-45q9r.firebaseapp.com`. Without this, another site can use up
       the free 5 million tiles a month. (If CARTO refuses the tiles, the app
       falls back to grey OpenStreetMap tiles by itself.)
 - [ ] **Restrict the Firebase browser key** to the same addresses. Google
@@ -16,8 +58,8 @@ owner, an admin, or someone on campus. Do them in this order.
       Website restrictions. Keep `http://localhost/*` only if you develop
       against the real project.
 - [ ] **Authorized domains.** Firebase console → Authentication → Settings →
-      Authorized domains. The two Firebase addresses are there by default.
-      Add a custom domain here if you use one, and add it to the CARTO key.
+      Authorized domains: the two Firebase addresses (there by default),
+      `snu-caddy.abeermiglani.com` (section 0) and `localhost`. Nothing else.
 - [ ] **A second admin.** Add one more trusted person under `admins` (see
       `docs/FIREBASE_SETUP.md`, step 7), so that one absent admin does not
       block the service.
