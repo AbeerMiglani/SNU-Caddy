@@ -4,7 +4,7 @@ import { CAMPUS_BBOX } from './data/campus.js';
 
 export const APP_NAME = 'SNU Caddy';
 /** Shown in the About dialog. Keep in step with package.json (tests/versions.test.mjs). */
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.0.1';
 /**
  * Who students write to when something is wrong (the About dialog shows it).
  * Set it to '' to show no contact.
