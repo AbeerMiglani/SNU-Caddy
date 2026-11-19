@@ -20,6 +20,8 @@ import { toRecord } from './live.js';
 const CODE_LIFE_MS = 10 * 60_000;
 const CLEAN_AFTER_MS = 24 * 60 * 60_000;
 const SLOW_WRITE_MS = 10_000;
+/** Sign out waits this long at most for the delete of an unused setup code. */
+const SIGN_OUT_WAIT_MS = 3_000;
 /** The "Now" column counts up ("5 s ago") and changes state with time alone. */
 const STATUS_REFRESH_MS = 5_000;
 const $ = (id) => document.getElementById(id);
@@ -66,7 +68,14 @@ async function boot() {
       $('signin-error').textContent = signInErrorText(err);
     }
   });
-  $('sign-out').addEventListener('click', () => fb.A.signOut(fb.auth));
+  /** The running admin session (startAdmin), or null. */
+  let session = null;
+  $('sign-out').addEventListener('click', async () => {
+    // A setup code on screen is deleted first: once signed out, the rules
+    // refuse the delete. (A dead connection cannot hold up the sign-out.)
+    await session?.beforeSignOut();
+    fb.A.signOut(fb.auth);
+  });
   let copyTimer = 0;
   $('copy-uid').addEventListener('click', async () => {
     const btn = $('copy-uid');
@@ -86,10 +95,13 @@ async function boot() {
     }, 2000);
   });
 
-  let stop = null;
+  // Each auth change gets a number. After an await, a callback whose number is
+  // old does nothing: the admin signed out (or in again) in the meantime.
+  let authGen = 0;
   fb.A.onAuthStateChanged(fb.auth, async (user) => {
-    stop?.();
-    stop = null;
+    const myGen = ++authGen;
+    session?.stop();
+    session = null;
     const signedIn = Boolean(user && !user.isAnonymous);
     $('who').hidden = !signedIn;
     if (!signedIn) {
@@ -103,16 +115,19 @@ async function boot() {
       return;
     }
     $('who-email').textContent = user.email;
+    // On a slow connection this can take long, and Sign out is on screen meanwhile.
+    show('loading');
     const isAdmin = await fb.D.get(fb.D.ref(fb.db, `admins/${user.uid}`))
       .then((s) => s.val() === true)
       .catch(() => false);
+    if (myGen !== authGen) return;
     if (!isAdmin) {
       $('my-uid').textContent = user.uid;
       show('denied');
       return;
     }
     show('admin');
-    stop = startAdmin(fb, user);
+    session = startAdmin(fb, user);
   });
 }
 
@@ -126,8 +141,31 @@ async function confirmed(promise, onSlow) {
   }
 }
 
+/**
+ * Empty what a session puts on the page (tables, setup code, messages). A
+ * sign-out and a new sign-in happen without a reload, so the next session
+ * must not find the rows and the QR code of the last one.
+ */
+function resetAdminView() {
+  $('fleet-body').replaceChildren();
+  $('drivers-body').replaceChildren();
+  $('code-box').hidden = true;
+  delete $('code-box').dataset.state;
+  $('code-qr').replaceChildren();
+  for (const id of ['code-text', 'code-meta', 'code-status', 'code-error']) $(id).textContent = '';
+  for (const id of ['fleet-status', 'fleet-error', 'drivers-status', 'drivers-error']) {
+    $(id).textContent = '';
+  }
+}
+
+/**
+ * @returns {{ stop: () => void, beforeSignOut: () => Promise<void> }}
+ *   `stop` ends the session; `beforeSignOut` deletes an unused setup code
+ *   while the admin may still do so.
+ */
 function startAdmin(fb, user) {
   const { D, db } = fb;
+  resetAdminView();
   let fleet = {};
   let drivers = {};
   /** caddies/{id}: the live state that students see. */
@@ -372,9 +410,15 @@ function startAdmin(fb, user) {
         $('drivers-status').textContent =
           'Still waiting for the connection. Keep this page open until it says “Unlinked”.';
       });
-      // Students should not see a ghost caddy from an unlinked phone.
-      const live = await D.get(D.ref(db, `caddies/${d.caddyId}`));
-      if (live.exists() && (live.val().online || live.val().charging)) {
+      // Students should not see a ghost caddy from an unlinked phone. But when
+      // another phone of this caddy is still linked (a phone was replaced), that
+      // phone may be driving it now: its state stays. (If the unlinked phone was
+      // the one on shift, it goes offline itself when it sees the unlink.)
+      const otherPhone = Object.entries(drivers).some(
+        ([other, x]) => other !== uid && x.caddyId === d.caddyId,
+      );
+      const snap = await D.get(D.ref(db, `caddies/${d.caddyId}`));
+      if (!otherPhone && snap.exists() && (snap.val().online || snap.val().charging)) {
         await D.update(D.ref(db, `caddies/${d.caddyId}`), { online: false, charging: false });
       }
       $('drivers-status').textContent = `Unlinked. ${name}’s phone can no longer send locations.`;
@@ -428,7 +472,12 @@ function startAdmin(fb, user) {
     const qr = qrcode(0, 'M');
     qr.addData(link);
     qr.make();
-    $('code-qr').innerHTML = qr.createSvgTag({ cellSize: 6, margin: 4, scalable: true });
+    // The library gives SVG markup: parse it as SVG, not as HTML (no innerHTML).
+    const svg = new DOMParser().parseFromString(
+      qr.createSvgTag({ cellSize: 6, margin: 4, scalable: true }),
+      'image/svg+xml',
+    ).documentElement;
+    $('code-qr').replaceChildren(document.importNode(svg, true));
     $('code-text').textContent = formatCode(code);
     $('code-box').hidden = false;
     $('code-box').dataset.state = 'live';
@@ -471,26 +520,44 @@ function startAdmin(fb, user) {
 
     // Called when the code is replaced, the admin signs out, or the page closes:
     // a code that was shown but not used must not stay valid off screen.
+    // Resolves when the server has deleted it (or at once if it was used).
     return () => {
       clearInterval(timer);
       offUse();
-      if (!used) D.remove(D.ref(db, `enrollCodes/${code}`)).catch(() => {});
+      if (!used) return D.remove(D.ref(db, `enrollCodes/${code}`)).catch(() => {});
+      return Promise.resolve();
     };
   }
 
   const onPageHide = () => stopCode?.();
   window.addEventListener('pagehide', onPageHide);
 
-  return () => {
-    offConnected();
-    offFleet();
-    offDrivers();
-    offLive();
-    offOffset();
-    clearInterval(statusTimer);
-    document.removeEventListener('visibilitychange', renderStatus);
-    window.removeEventListener('pagehide', onPageHide);
-    stopCode?.();
+  return {
+    stop() {
+      offConnected();
+      offFleet();
+      offDrivers();
+      offLive();
+      offOffset();
+      clearInterval(statusTimer);
+      document.removeEventListener('visibilitychange', renderStatus);
+      window.removeEventListener('pagehide', onPageHide);
+      // Signed out elsewhere (another tab): the delete may be refused now. The
+      // code then ends at its expiry time (10 minutes at most).
+      stopCode?.();
+      stopCode = null;
+      resetAdminView();
+    },
+    /** Delete an unused setup code while still signed in; wait up to SIGN_OUT_WAIT_MS. */
+    async beforeSignOut() {
+      const deleting = stopCode?.();
+      stopCode = null;
+      if (!deleting) return;
+      let timer = 0;
+      const limit = new Promise((resolve) => (timer = setTimeout(resolve, SIGN_OUT_WAIT_MS)));
+      await Promise.race([deleting, limit]);
+      clearTimeout(timer);
+    },
   };
 }
 

@@ -271,6 +271,26 @@ export function createStudentGate(els, { onLive, onPosition, onChange }) {
     }
   }
 
+  /**
+   * Back on screen, or out of the idle pause: check the campus again if the
+   * last check is old. An "on campus" from longer ago than GEOFENCE.graceMs
+   * proves nothing now (the phone may have left campus long ago), so live
+   * data waits for the new check ("Checking…"). Within that time the caddies
+   * show at once.
+   */
+  function resumeFence() {
+    if (!signedIn() || demo || paused || document.hidden) {
+      scheduleRecheck();
+      return;
+    }
+    if (fence?.kind === 'inside' && Date.now() - insideAt > GEOFENCE.graceMs) {
+      fence = { kind: 'checking' };
+      render();
+    }
+    if (fence?.kind === 'checking' || Date.now() - fenceAt > GEOFENCE.recheckMs) checkFence();
+    else scheduleRecheck();
+  }
+
   els.cardAction.addEventListener('click', () => checkFence({ userAction: true }));
 
   // Battery: no timers and no live data while the app is not on screen.
@@ -280,8 +300,7 @@ export function createStudentGate(els, { onLive, onPosition, onChange }) {
       updateLive();
       return;
     }
-    if (signedIn() && !demo && !paused && Date.now() - fenceAt > GEOFENCE.recheckMs) checkFence();
-    else scheduleRecheck();
+    resumeFence();
     updateLive();
   });
 
@@ -295,7 +314,11 @@ export function createStudentGate(els, { onLive, onPosition, onChange }) {
     showLoginError('');
     els.loginButton.disabled = true;
     try {
-      await signInWithSnu(fb ?? (await start()));
+      // If Firebase does not start, follow() has already said why ("No
+      // connection…" or "…setup problem…"): that text stays, it is not a sign-in error.
+      const ready = fb ?? (await start().catch(() => null));
+      if (!ready) return;
+      await signInWithSnu(ready);
     } catch (err) {
       showLoginError(signInErrorText(err) || '');
     } finally {
@@ -367,8 +390,7 @@ export function createStudentGate(els, { onLive, onPosition, onChange }) {
       if (paused === on) return;
       paused = on;
       if (on) clearTimeout(recheckTimer);
-      else if (signedIn() && !demo && Date.now() - fenceAt > GEOFENCE.recheckMs) checkFence();
-      else scheduleRecheck();
+      else resumeFence();
       updateLive();
     },
     locate,

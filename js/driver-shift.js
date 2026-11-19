@@ -103,6 +103,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   let armed = false; // onDisconnect is registered on the current connection
   let issued = false; // a position write of this shift went to the SDK (maybe not confirmed yet)
   let offCampusMarked = false;
+  let markCount = 0; // off-campus marks so far (see the success handler in send())
   let hiddenAt = null;
 
   const emit = () => onChange?.({ ...state });
@@ -178,6 +179,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
 
   function send(fix) {
     const myGen = gen;
+    const myMark = markCount;
     const reason = want;
     want = null;
     inFlight = true;
@@ -219,7 +221,11 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
         holdUntil = 0;
         if (myGen !== gen) return;
         sent = fix;
-        offCampusMarked = false;
+        // This write's online:true is newer than the online:false of the last
+        // mark only if it was sent after that mark. A write sent before it (the
+        // caddy left campus while it was in flight) lands first: the mark stays,
+        // and the next fix on campus sends online:true again.
+        if (myMark === markCount) offCampusMarked = false;
         state.sentAt = ackAt;
         state.refused = false;
         save();
@@ -301,6 +307,7 @@ export function createShift({ store, geo, wake, onCampus, persist, onChange, doc
   function markOffCampus() {
     if (offCampusMarked || !issued) return;
     offCampusMarked = true;
+    markCount += 1;
     // The SDK keeps the order of writes: this lands after a write still in flight.
     store.setFields({ online: false }).catch(() => {
       offCampusMarked = false;

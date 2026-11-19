@@ -59,9 +59,9 @@ The automated tests start their own emulator, so stop `npm run emulators`
 (Ctrl-C) first:
 
 ```bash
-npm test                   # 37 security-rule tests + 83 unit tests
+npm test                   # 37 security-rule tests + 84 unit tests
 npm run test:unit          # only the unit tests (no Java needed)
-npm run test:e2e           # 6 browser tests: the 3 pages in Chromium under the real CSP
+npm run test:e2e           # 9 browser tests: the 3 pages in Chromium under the real CSP
 ```
 
 `test:e2e` needs Chromium once: `npx playwright install chromium`. It

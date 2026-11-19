@@ -16,20 +16,29 @@ import { bearingDeg, distanceM, lerpLatLng, turnDeg } from './lib/geo.js';
 const FRAME_MS = 1000 / GLIDE.fps;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+/** The shapes of the cart icon: [tag, class, attributes]. */
+const CART_SHAPES = [
+  ['rect', 'cart-wheel', { x: 1, y: 6, width: 4, height: 7, rx: 1.5 }],
+  ['rect', 'cart-wheel', { x: 19, y: 6, width: 4, height: 7, rx: 1.5 }],
+  ['rect', 'cart-wheel', { x: 1, y: 23, width: 4, height: 7, rx: 1.5 }],
+  ['rect', 'cart-wheel', { x: 19, y: 23, width: 4, height: 7, rx: 1.5 }],
+  ['rect', 'cart-body', { x: 3.5, y: 2, width: 17, height: 32, rx: 6 }],
+  ['path', 'cart-glass', { d: 'M6.5 9.5 Q12 6 17.5 9.5 L17 11.5 H7 Z' }],
+  ['rect', 'cart-roof', { x: 5.5, y: 12.5, width: 13, height: 17, rx: 3 }],
+];
+
 /** Top-down golf cart, nose pointing up (north) at 0 degrees. */
 export function cartSvg() {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '0 0 24 36');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
-  svg.innerHTML =
-    '<rect class="cart-wheel" x="1" y="6" width="4" height="7" rx="1.5"/>' +
-    '<rect class="cart-wheel" x="19" y="6" width="4" height="7" rx="1.5"/>' +
-    '<rect class="cart-wheel" x="1" y="23" width="4" height="7" rx="1.5"/>' +
-    '<rect class="cart-wheel" x="19" y="23" width="4" height="7" rx="1.5"/>' +
-    '<rect class="cart-body" x="3.5" y="2" width="17" height="32" rx="6"/>' +
-    '<path class="cart-glass" d="M6.5 9.5 Q12 6 17.5 9.5 L17 11.5 H7 Z"/>' +
-    '<rect class="cart-roof" x="5.5" y="12.5" width="13" height="17" rx="3"/>';
+  for (const [tag, className, attrs] of CART_SHAPES) {
+    const shape = document.createElementNS(SVG_NS, tag);
+    shape.setAttribute('class', className);
+    for (const [name, value] of Object.entries(attrs)) shape.setAttribute(name, String(value));
+    svg.append(shape);
+  }
   return svg;
 }
 

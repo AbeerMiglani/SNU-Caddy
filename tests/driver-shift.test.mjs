@@ -392,6 +392,26 @@ test('outside campus while the first write is pending: online:false still follow
   assert.deepEqual(db.calls('fields'), [['fields', { online: false }]]);
 });
 
+test('off campus while a write is in flight, then back within 5 m: online again at once', async () => {
+  const shift = makeShift();
+  db.hold = [];
+  shift.go();
+  geo.fix(HOME);
+  await flush();
+  geo.fix(OFF_CAMPUS); // a GPS jump: online:false goes out behind the pending write
+  const held = db.hold;
+  db.hold = null;
+  held.forEach((r) => r()); // the write from BEFORE the jump is confirmed only now
+  await flush();
+  geo.fix(offsetM(HOME, 2, 0)); // back on campus, inside the 5 m deadband
+  await wait(3000);
+  // Without the second position write, students see Offline until the 30 s heartbeat.
+  assert.deepEqual(
+    db.log.map(([k, f]) => (k === 'fields' ? f : k)),
+    ['position', { online: false }, 'arm', 'position'],
+  );
+});
+
 test('GPS hovering around 20 m: no flicker between "ok" and "weak"', async () => {
   const shift = makeShift();
   shift.go();
