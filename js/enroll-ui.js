@@ -84,6 +84,10 @@ function createUi(dialog) {
     say('Point the camera at the QR code on the admin page.');
     try {
       const started = await startScanner(video, (code) => {
+        // jsQR can read the code in the very first frame, before startScanner()
+        // returns: end this start too, so the stopped scanner is not kept below
+        // (the next tap on the button would only "stop" it).
+        if (starting === token) starting = null;
         scanner = null;
         scanBox.hidden = true;
         scanBtn.textContent = 'Scan QR code';

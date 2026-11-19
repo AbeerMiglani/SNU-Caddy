@@ -46,7 +46,7 @@ flowchart LR
 | Service worker | `sw.js` | Opens the app shell in dead zones; never caches live data |
 | Admin dashboard | `admin.html`, `js/admin.js` | SNU accounts on the admin list |
 | Security rules | `database.rules.json` | Enforced by Firebase on every read and write |
-| Tests | `tests/*.test.mjs`, `tests/e2e/` | 37 rules tests in the emulator + 83 unit tests (`npm test`); 6 browser tests under the real CSP (`npm run test:e2e`); both run in CI on every PR |
+| Tests | `tests/*.test.mjs`, `tests/e2e/` | 37 rules tests in the emulator + 84 unit tests (`npm test`); 9 browser tests under the real CSP (`npm run test:e2e`); both run in CI on every PR |
 
 ## 2. Roles and sign-in
 
@@ -239,11 +239,11 @@ with a new `lastUpdated`, at most once per second.
 
 The rules are tested with the Firebase Emulator: 37 tests, one per attack
 or allowed action, including the exact writes a driver phone makes in a
-shift (`npm test`). The shift engine has 52 more tests with a fake GPS, a
+shift (`npm test`). The shift engine has 53 more tests with a fake GPS, a
 fake database and fake timers; the map states have 4 tests, the demo 7,
 the campus check and the short texts 7, and other tests keep the service
 worker list, the CSP hashes, the preload lists and the pinned versions in
-sync (`npm run test:unit`, no emulator needed). Six browser tests open the
+sync (`npm run test:unit`, no emulator needed). Nine browser tests open the
 three pages in Chromium, served by
 the Hosting emulator with the real headers, so a CSP that blocks something
 fails CI (`npm run test:e2e`).
@@ -296,7 +296,7 @@ touches live data, sign-in, Firebase's `/__/` pages or map tiles.
 | Driver location outside work | The phone shares only between GO and Go offline, and stops at the campus fence + 100 m. The rules also reject positions outside the campus box. |
 | Student location privacy | The geofence check runs **on the phone**. The same fix draws the student's own dot on the map and gives the distance to each caddy. The location is never sent or stored: it lives in the page's memory only, and the app has no code path that writes it. |
 | Ghost caddies (dead battery, closed app, dead zone) | `onDisconnect()` sets `online: false` on the server (tested). Students also dim any caddy whose `lastUpdated` is older than **90 s** and label it "Signal lost". |
-| Script injection (XSS) | All text goes into the page with `textContent`. A strict Content-Security-Policy allows only this site's scripts, hashed inline scripts and the pinned CDNs (see section 5). Leaflet, jsQR and qrcode-generator are pinned and use Subresource Integrity. The Firebase SDK is pinned to 12.19.0 on Google's gstatic CDN; it loads as ES modules, which cannot carry SRI. Pages cannot be framed (`frame-ancestors 'none'`). |
+| Script injection (XSS) | All text goes into the page with `textContent`, and no code uses `innerHTML` (the cart icon is built with `createElementNS`; the setup QR's SVG is parsed with `DOMParser`). A strict Content-Security-Policy allows only this site's scripts, hashed inline scripts and the pinned CDNs (see section 5). Leaflet, jsQR and qrcode-generator are pinned and use Subresource Integrity. The Firebase SDK is pinned to 12.19.0 on Google's gstatic CDN; it loads as ES modules, which cannot carry SRI. Pages cannot be framed (`frame-ancestors 'none'`). |
 | A bad CDN file or a cached old version | The service worker caches only version-pinned CDN URLs, and same-origin files with network first; it never caches live data or sign-in. |
 | Students who graduate or leave | Firebase keeps a session until sign-out, even after the Google Workspace account is disabled. Options for IT: (a) disable or delete old users in Firebase Authentication each semester, or (b) add one rule line that requires a fresh sign-in every N days (`auth.token.auth_time`). The current build keeps students signed in, as requested. |
 | Geofence bypass with developer tools | Accepted: the geofence is a usage policy, not a security boundary. The data is protected by the SNU login. |
